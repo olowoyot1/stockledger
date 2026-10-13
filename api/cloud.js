@@ -174,8 +174,22 @@ module.exports = async (req, res) => {
 
     if (body.action === 'login') return send(res, 200, { ok: true, workspaceId: ws.id, account: await account() });
 
+    if (body.action === 'listCompanies') {
+      if (role !== 'superadmin') return send(res, 403, { error: 'Superadmin access is required.' });
+      const companies = await sb(WS + '?select=id,username,business_name,plan,trial_ends_at,paid_until,role,created_at&order=created_at.desc');
+      const members = await sb(MEM + '?select=id,workspace_id,username,created_at&order=created_at');
+      const memberCounts = members.reduce((counts, member) => {
+        counts[member.workspace_id] = (counts[member.workspace_id] || 0) + 1;
+        return counts;
+      }, {});
+      return send(res, 200, { ok: true, companies: companies.map(company => ({
+        ...company,
+        staffCount: memberCounts[company.id] || 0
+      })) });
+    }
+
     if (['listUsers', 'addUser', 'removeUser'].includes(body.action)) {
-      if (role !== 'owner') return send(res, 403, { error: 'Only the account owner can manage users.' });
+      if (role !== 'owner' && role !== 'superadmin') return send(res, 403, { error: 'Only an account owner or superadmin can manage users.' });
       if (body.action === 'addUser') {
         const nu = norm(body.newUsername), np = String(body.newPin || '');
         if (nu.length < 3 || nu.length > 100 || np.length < 8 || np.length > 128) return send(res, 400, { error: 'A login (3–100 characters) and a password of 8–128 characters are required.' });
