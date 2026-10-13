@@ -9,8 +9,12 @@ create table if not exists public.dc_workspaces (
   plan text not null default 'trial' check (plan in ('trial','active','suspended')),
   trial_ends_at timestamptz not null default now() + interval '14 days',
   paid_until timestamptz,
+  role text not null default 'owner' check (role in ('owner', 'superadmin')),
   created_at timestamptz not null default now()
 );
+
+-- Existing installations can be upgraded safely with:
+-- alter table public.dc_workspaces add column if not exists role text not null default 'owner' check (role in ('owner', 'superadmin'));
 
 create table if not exists public.delite_cravings_state (
   id text primary key,                      -- = dc_workspaces.id (one row per business)

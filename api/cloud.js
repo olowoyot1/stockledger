@@ -119,7 +119,7 @@ async function authenticate(username, pin) {
   if (!username || username.length > 100 || !pin || pin.length > 128) return { status: 401, error: 'Valid login and password are required' };
   if (isLocked(username)) return { status: 429, error: 'Too many failed attempts. Try again in 15 minutes.' };
   const enc = encodeURIComponent(username);
-  let ws = (await sb(WS + '?username=eq.' + enc + '&select=*'))[0], hash = ws?.pin_hash, role = 'owner', member = null;
+  let ws = (await sb(WS + '?username=eq.' + enc + '&select=*'))[0], hash = ws?.pin_hash, role = ws?.role || 'owner', member = null;
   if (!ws) {
     member = (await sb(MEM + '?username=eq.' + enc + '&select=*'))[0];
     if (member) { role = 'staff'; hash = member.pin_hash; ws = (await sb(WS + '?id=eq.' + encodeURIComponent(member.workspace_id) + '&select=*'))[0]; }
