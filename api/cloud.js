@@ -29,7 +29,10 @@ function verifyPin(pin, storedHash) {
 
 async function sb(path, options = {}) {
   const base = String(process.env.SUPABASE_URL || '').replace(/\/$/, '');
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  // Supabase integrations may expose the current secret key name instead of
+  // the legacy service-role key name. Prefer the current name and keep the
+  // legacy fallback for existing deployments.
+  const key = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!base || !key) throw new Error('Supabase environment variables are not configured.');
   const res = await fetch(base + '/rest/v1/' + path, {
     ...options,
