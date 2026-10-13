@@ -20,8 +20,17 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;back
 :focus-visible{outline:none;box-shadow:var(--ring)}
 
 /* Login */
-.login-screen{min-height:100vh;display:grid;place-items:center;padding:20px;background:var(--ink)}
-.login-card{width:min(400px,100%);background:var(--card);border-radius:16px;padding:32px;box-shadow:0 24px 60px rgb(0 0 0 / .35)}
+  .login-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;gap:clamp(32px,8vw,120px);padding:clamp(24px,6vw,80px);background:var(--ink)}
+  .marketing-copy{width:min(430px,100%);color:#fff}
+  .marketing-copy .eyebrow{display:inline-block;margin-bottom:18px;color:#5eead4;font-size:12px;font-weight:800;letter-spacing:.12em;text-transform:uppercase}
+  .marketing-copy h1{margin:0 0 18px;font-size:clamp(36px,5vw,64px);line-height:1.02;letter-spacing:-.04em}
+  .marketing-copy p{margin:0;color:#d6d3d1;font-size:18px;line-height:1.6}
+  .marketing-points{display:flex;flex-wrap:wrap;gap:8px;margin-top:28px}
+  .marketing-points span,.pricing-note{border:1px solid rgb(255 255 255 / .18);border-radius:999px;padding:8px 12px;color:#e7e5e4;font-size:12px}
+  .login-card{width:min(400px,100%);background:var(--card);border-radius:16px;padding:32px;box-shadow:0 24px 60px rgb(0 0 0 / .35)}
+  .pricing-note{display:flex;gap:8px;align-items:center;margin-top:16px;border-color:var(--line);border-radius:10px;color:var(--muted);background:var(--bg)}
+  .pricing-note strong{color:var(--ink)}
+  @media (max-width:760px){.login-screen{flex-direction:column;align-items:stretch;gap:28px}.marketing-copy{width:min(520px,100%)}.marketing-copy h1{font-size:42px}.marketing-copy p{font-size:16px}}
 .brand-mark{width:48px;height:48px;border-radius:12px;background:var(--brand);color:var(--card);display:grid;place-items:center;font-weight:800;margin-bottom:16px}
 .login-card h1{margin:0;font-size:24px}
 .login-card form{display:grid;gap:14px;margin-top:24px}
