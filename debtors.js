@@ -1,38 +1,116 @@
-(()=>{'use strict';
-const DKEY='dc_debtors_v1',SKEY='dc_credit_sales_v1',PKEY='dc_debtor_payments_v1';
-const $=id=>document.getElementById(id);
-const read=(k,f)=>{try{const x=localStorage.getItem(k);return x===null?f:JSON.parse(x)}catch{return f}};
-const write=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
-const money=x=>'₦'+Number(x||0).toLocaleString('en-NG',{maximumFractionDigits:2});
-const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const today=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
-let debtors=read(DKEY,[]),sales=read(SKEY,[]),payments=read(PKEY,[]);
-const id=p=>'DC-'+p+'-'+Date.now()+'-'+Math.random().toString(36).slice(2,7);
-const totalSales=d=>sales.filter(x=>x.debtorId===d.id).reduce((s,x)=>s+Number(x.total||0),0);
-const totalPaid=d=>payments.filter(x=>x.debtorId===d.id).reduce((s,x)=>s+Number(x.amount||0),0);
-const balance=d=>Number(d.openingBalance||0)+totalSales(d)-totalPaid(d);
-function persist(){write(DKEY,debtors);write(SKEY,sales);write(PKEY,payments);if(window.DelCravingsCloudSync)window.DelCravingsCloudSync()}
-function products(){return read('dc_products_v3',[])}
-function ensureUI(){
-if($('dcCreditBtn'))return;
-const b=document.createElement('button');b.id='dcCreditBtn';b.className='btn nav-btn';b.type='button';b.textContent='Credit & Debtors';b.style.cssText='position:fixed;right:18px;bottom:18px;z-index:9998;box-shadow:0 8px 25px #0003';b.onclick=open;document.body.appendChild(b);
-const style=document.createElement('style');style.textContent='.dc-credit-modal{position:fixed;inset:0;background:#0008;z-index:9999;display:none;align-items:center;justify-content:center;padding:14px}.dc-credit-card{background:var(--panel,#fff);color:var(--text,#111);width:min(1180px,100%);max-height:94vh;overflow:auto;border-radius:16px;padding:18px;box-shadow:0 20px 70px #0006}.dc-credit-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.dc-credit-card input,.dc-credit-card select,.dc-credit-card textarea{width:100%;padding:9px;border:1px solid #ccc;border-radius:8px;box-sizing:border-box}.dc-credit-wide{grid-column:1/-1}.dc-credit-actions{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.dc-credit-table{width:100%;border-collapse:collapse}.dc-credit-table th,.dc-credit-table td{padding:8px;border-bottom:1px solid #ddd;text-align:left}.dc-credit-stat{padding:12px;border-radius:10px;background:#f4f4f4}.dc-close{float:right;font-size:20px}@media(max-width:800px){.dc-credit-grid{grid-template-columns:1fr 1fr}}@media(max-width:520px){.dc-credit-grid{grid-template-columns:1fr}}';document.head.appendChild(style);
-const m=document.createElement('div');m.id='dcCreditModal';m.className='dc-credit-modal';m.innerHTML='<div class="dc-credit-card"><button id="dcCreditClose" class="btn dc-close">×</button><h2>Credit Sales & Debtors</h2><div id="dcCreditBody"></div></div>';document.body.appendChild(m);$('dcCreditClose').onclick=()=>m.style.display='none';
-}
-function open(){ensureUI();$('dcCreditModal').style.display='flex';render()}
-function stats(){return{credit:sales.reduce((s,x)=>s+Number(x.total||0),0),paid:payments.reduce((s,x)=>s+Number(x.amount||0),0),outstanding:debtors.reduce((s,d)=>s+Math.max(0,balance(d)),0)}}
-function render(){ensureUI();const st=stats(),ps=products();$('dcCreditBody').innerHTML='<div class="dc-credit-grid"><div class="dc-credit-stat"><small>Total Credit Sales</small><h3>'+money(st.credit)+'</h3></div><div class="dc-credit-stat"><small>Total Payments</small><h3>'+money(st.paid)+'</h3></div><div class="dc-credit-stat"><small>Outstanding</small><h3>'+money(st.outstanding)+'</h3></div><div class="dc-credit-stat"><small>Customers</small><h3>'+debtors.length+'</h3></div></div><div class="dc-credit-actions"><button class="btn" id="dcTabDebtors">Debtors</button><button class="btn" id="dcTabSale">New Credit Sale</button><button class="btn" id="dcTabPay">Record Payment</button></div><div id="dcCreditPanel"></div>';
-$('dcTabDebtors').onclick=showDebtors;$('dcTabSale').onclick=()=>showSale(ps);$('dcTabPay').onclick=showPay;showDebtors()}
-function showDebtors(){const rows=debtors.map(d=>{const bal=balance(d);return '<tr><td><b>'+esc(d.name)+'</b><br><small>'+esc(d.phone||'')+'</small></td><td>'+money(totalSales(d))+'</td><td>'+money(totalPaid(d))+'</td><td>'+money(bal)+'</td><td><button class="btn" data-ledger="'+esc(d.id)+'">Ledger</button></td></tr>'}).join('');
-$('dcCreditPanel').innerHTML='<h3>Debtor Register</h3><div class="dc-credit-grid"><input id="dcDName" placeholder="Customer name"><input id="dcDPhone" placeholder="Phone"><input id="dcDAddress" placeholder="Address"><input id="dcDLimit" type="number" min="0" placeholder="Credit limit"><textarea id="dcDNotes" class="dc-credit-wide" placeholder="Notes"></textarea></div><div class="dc-credit-actions"><button class="btn" id="dcAddDebtor">Add Debtor</button></div><div style="overflow:auto"><table class="dc-credit-table"><thead><tr><th>Customer</th><th>Credit Sales</th><th>Payments</th><th>Balance</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>';
-$('dcAddDebtor').onclick=()=>{const name=$('dcDName').value.trim();if(!name)return alert('Customer name is required.');debtors.push({id:id('D'),name,phone:$('dcDPhone').value.trim(),address:$('dcDAddress').value.trim(),creditLimit:Number($('dcDLimit').value||0),openingBalance:0,notes:$('dcDNotes').value.trim(),createdAt:new Date().toISOString()});persist();render()};
-document.querySelectorAll('[data-ledger]').forEach(b=>b.onclick=()=>ledger(b.dataset.ledger))}
-function showSale(ps){$('dcCreditPanel').innerHTML='<h3>New Credit Sale</h3><div class="dc-credit-grid"><select id="dcSaleDebtor"><option value="">Select customer</option>'+debtors.map(d=>'<option value="'+esc(d.id)+'">'+esc(d.name)+' — '+money(balance(d))+'</option>').join('')+'</select><select id="dcSaleProduct"><option value="">Select product</option>'+ps.map(p=>'<option value="'+esc(p.id)+'">'+esc(p.name)+' — '+money(p.price)+'</option>').join('')+'</select><input id="dcSaleQty" type="number" min="1" value="1"><input id="dcSalePrice" type="number" min="0" placeholder="Unit price"><input id="dcSalePaid" type="number" min="0" value="0" placeholder="Amount paid"><input id="dcSaleDue" type="date" value="'+today()+'"><textarea id="dcSaleNotes" class="dc-credit-wide" placeholder="Notes"></textarea></div><div class="dc-credit-actions"><button class="btn" id="dcSaveSale">Save Credit Sale</button></div>';
-$('dcSaleProduct').onchange=()=>{const p=ps.find(x=>x.id===$('dcSaleProduct').value);$('dcSalePrice').value=p?.price||0};
-$('dcSaveSale').onclick=()=>{const debtorId=$('dcSaleDebtor').value,p=ps.find(x=>x.id===$('dcSaleProduct').value),qty=Math.floor(Number($('dcSaleQty').value||0)),price=Number($('dcSalePrice').value||0),paid=Number($('dcSalePaid').value||0);if(!debtorId||!p||qty<1)return alert('Select a customer, product and valid quantity.');const total=qty*price;if(paid>total)return alert('Payment cannot exceed the sale amount.');sales.push({id:id('S'),date:today(),debtorId,items:[{productId:p.id,name:p.name,qty,unitPrice:price,total}],total,paid,dueDate:$('dcSaleDue').value||today(),notes:$('dcSaleNotes').value.trim(),createdAt:new Date().toISOString()});if(paid>0)payments.push({id:id('P'),date:today(),debtorId,amount:paid,method:'At sale',reference:'Credit Sale',notes:'Payment against credit sale'});persist();alert('Credit sale recorded. Outstanding: '+money(total-paid));render()}}
-function showPay(){$('dcCreditPanel').innerHTML='<h3>Record Customer Payment</h3><div class="dc-credit-grid"><select id="dcPayDebtor"><option value="">Select customer</option>'+debtors.map(d=>'<option value="'+esc(d.id)+'">'+esc(d.name)+' — '+money(balance(d))+'</option>').join('')+'</select><input id="dcPayAmount" type="number" min="0" placeholder="Amount"><input id="dcPayDate" type="date" value="'+today()+'"><select id="dcPayMethod"><option>Cash</option><option>Transfer</option><option>POS</option><option>Other</option></select><input id="dcPayRef" placeholder="Reference"><textarea id="dcPayNotes" class="dc-credit-wide" placeholder="Notes"></textarea></div><div class="dc-credit-actions"><button class="btn" id="dcSavePay">Save Payment</button></div>';
-$('dcSavePay').onclick=()=>{const debtorId=$('dcPayDebtor').value,amount=Number($('dcPayAmount').value||0);if(!debtorId||amount<=0)return alert('Select a customer and enter a valid amount.');payments.push({id:id('P'),date:$('dcPayDate').value||today(),debtorId,amount,method:$('dcPayMethod').value,reference:$('dcPayRef').value.trim(),notes:$('dcPayNotes').value.trim(),createdAt:new Date().toISOString()});persist();render()}}
-function ledger(debtorId){const d=debtors.find(x=>x.id===debtorId);if(!d)return;const tx=[...sales.filter(x=>x.debtorId===d.id).map(x=>({date:x.date,type:'Credit Sale',debit:x.total,credit:0,ref:x.id})),...payments.filter(x=>x.debtorId===d.id).map(x=>({date:x.date,type:'Payment',debit:0,credit:x.amount,ref:x.reference||x.id}))].sort((a,b)=>String(a.date).localeCompare(String(b.date)));let bal=Number(d.openingBalance||0);const body=tx.map(x=>{bal+=Number(x.debit||0)-Number(x.credit||0);return '<tr><td>'+esc(x.date)+'</td><td>'+esc(x.type)+'</td><td>'+money(x.debit)+'</td><td>'+money(x.credit)+'</td><td>'+money(bal)+'</td><td>'+esc(x.ref)+'</td></tr>'}).join('');$('dcCreditPanel').innerHTML='<button class="btn" id="dcBackLedger">← Back</button><h3>'+esc(d.name)+' — Customer Ledger</h3><p>Phone: '+esc(d.phone||'—')+' · Address: '+esc(d.address||'—')+'</p><div class="dc-credit-stat"><b>Outstanding Balance: '+money(balance(d))+'</b></div><div style="overflow:auto;margin-top:12px"><table class="dc-credit-table"><thead><tr><th>Date</th><th>Type</th><th>Debit</th><th>Credit</th><th>Balance</th><th>Reference</th></tr></thead><tbody>'+body+'</tbody></table></div>';$('dcBackLedger').onclick=render}
-window.DelCravingsRefreshCredit=()=>{debtors=read(DKEY,[]);sales=read(SKEY,[]);payments=read(PKEY,[]);if($('dcCreditModal')?.style.display==='flex')render()};
-ensureUI();
+/* Credit sales, debtors and payments. Records are append-only (corrections are made with new
+ * entries, like a paper ledger) and sync through the same cloud channel as sales data. */
+(() => {
+  'use strict';
+  const SL = () => window.StockLedger, t = (k, v) => window.I18N.t(k, v), $ = id => document.getElementById(id);
+  const th = (k, v) => SL().th(k, v), esc = x => SL().esc(x), money = x => SL().money(x);
+  let view = 'debtors', ledgerId = null, debtors = [], sales = [], payments = [];
+
+  const load = () => { const K = SL().KEYS; debtors = SL().read(K.debtors, []); sales = SL().read(K.credit, []); payments = SL().read(K.payments, []); };
+  function persist() {
+    const K = SL().KEYS;
+    const ok = SL().write(K.debtors, debtors) && SL().write(K.credit, sales) && SL().write(K.payments, payments);
+    if (!ok) SL().toast(t('toast.storageFull'));
+    return ok;
+  }
+  const totalSales = d => sales.filter(x => x.debtorId === d.id).reduce((s, x) => s + Number(x.total || 0), 0);
+  const totalPaid = d => payments.filter(x => x.debtorId === d.id).reduce((s, x) => s + Number(x.amount || 0), 0);
+  const balance = d => Number(d.openingBalance || 0) + totalSales(d) - totalPaid(d);
+  const field = (id, label, attrs = '') => '<label><span>' + th(label) + '</span><input id="' + id + '" ' + attrs + '></label>';
+
+  function render() {
+    const root = $('creditRoot'); if (!root) return;
+    load();
+    const stat = (k, v) => '<div class="credit-stat"><small>' + th(k) + '</small><h3>' + v + '</h3></div>';
+    const outstanding = debtors.reduce((s, d) => s + Math.max(0, balance(d)), 0);
+    const tabBtn = (v, k) => '<button class="btn' + (view === v ? ' btn-primary' : '') + '" data-view="' + v + '" type="button">' + th(k) + '</button>';
+    root.innerHTML = '<div class="credit-grid">' + stat('cr.totalCredit', money(sales.reduce((s, x) => s + Number(x.total || 0), 0))) + stat('cr.totalPaid', money(payments.reduce((s, x) => s + Number(x.amount || 0), 0)))
+      + stat('cr.outstanding', money(outstanding)) + stat('cr.customers', debtors.length) + '</div>'
+      + '<div class="credit-actions">' + tabBtn('debtors', 'cr.tabDebtors') + tabBtn('sale', 'cr.tabSale') + tabBtn('pay', 'cr.tabPay') + '</div><div id="creditPanel" class="panel"></div>';
+    ({ debtors: showDebtors, sale: showSale, pay: showPay, ledger: showLedger }[view] || showDebtors)();
+    SL().enhanceDates(root);
+  }
+
+  function showDebtors() {
+    const body = debtors.map(d => '<tr><td><b>' + esc(d.name) + '</b><br><small class="muted">' + esc(d.phone || '') + '</small></td><td>' + money(totalSales(d)) + '</td><td>' + money(totalPaid(d)) + '</td><td><b>' + money(balance(d)) + '</b></td><td><button class="btn" data-ledger="' + esc(d.id) + '" type="button">' + th('cr.ledger') + '</button></td></tr>').join('')
+      || '<tr><td colspan="5" class="muted">' + th('cr.noDebtors') + '</td></tr>';
+    $('creditPanel').innerHTML = '<h3>' + th('cr.register') + '</h3><div class="credit-form">' + field('crName', 'cr.name', 'maxlength="120"') + field('crPhone', 'cr.phone', 'maxlength="40" inputmode="tel"') + field('crAddress', 'cr.address', 'maxlength="200"')
+      + field('crLimit', 'cr.limit', 'type="number" min="0" step="any" inputmode="decimal"') + field('crOpening', 'cr.openingBal', 'type="number" min="0" step="any" inputmode="decimal"')
+      + '<label class="wide"><span>' + th('cr.notes') + '</span><textarea id="crNotes" maxlength="500"></textarea></label></div><div class="credit-actions"><button class="btn btn-primary" id="crAdd" type="button">' + th('cr.addDebtor') + '</button></div>'
+      + '<div class="table-wrap"><table class="credit-table"><thead><tr><th scope="col">' + th('cr.customer') + '</th><th scope="col">' + th('cr.creditSales') + '</th><th scope="col">' + th('cr.payments') + '</th><th scope="col">' + th('cr.balance') + '</th><th></th></tr></thead><tbody>' + body + '</tbody></table></div>';
+  }
+
+  function showSale() {
+    const ps = SL().read(SL().KEYS.products, []);
+    $('creditPanel').innerHTML = '<h3>' + th('cr.tabSale') + '</h3><div class="credit-form"><label><span>' + th('cr.customer') + '</span><select id="crSaleDebtor"><option value="">' + th('cr.selectCustomer') + '</option>'
+      + debtors.map(d => '<option value="' + esc(d.id) + '">' + esc(d.name) + ' — ' + money(balance(d)) + '</option>').join('') + '</select></label>'
+      + '<label><span>' + th('col.product') + '</span><select id="crSaleProduct"><option value="">' + th('cr.selectProduct') + '</option>' + ps.map(p => '<option value="' + esc(p.id) + '">' + esc(p.name) + ' — ' + money(p.price) + '</option>').join('') + '</select></label>'
+      + field('crSaleQty', 'cr.qty', 'type="number" min="1" step="1" value="1" inputmode="numeric"') + field('crSalePrice', 'cr.unitPrice', 'type="number" min="0" step="any" inputmode="decimal"')
+      + field('crSalePaid', 'cr.amountPaid', 'type="number" min="0" step="any" value="0" inputmode="decimal"') + field('crSaleDue', 'cr.dueDate', 'type="date" value="' + SL().today() + '"')
+      + '<label class="wide"><span>' + th('cr.notes') + '</span><textarea id="crSaleNotes" maxlength="500"></textarea></label></div><div class="credit-actions"><button class="btn btn-primary" id="crSaveSale" type="button">' + th('cr.saveSale') + '</button></div>';
+    $('crSaleProduct').onchange = () => { const p = ps.find(x => x.id === $('crSaleProduct').value); $('crSalePrice').value = p ? p.price : 0; };
+  }
+
+  function showPay() {
+    $('creditPanel').innerHTML = '<h3>' + th('cr.tabPay') + '</h3><div class="credit-form"><label><span>' + th('cr.customer') + '</span><select id="crPayDebtor"><option value="">' + th('cr.selectCustomer') + '</option>'
+      + debtors.map(d => '<option value="' + esc(d.id) + '">' + esc(d.name) + ' — ' + money(balance(d)) + '</option>').join('') + '</select></label>'
+      + field('crPayAmount', 'cr.amount', 'type="number" min="0" step="any" inputmode="decimal"') + field('crPayDate', 'cr.date', 'type="date" value="' + SL().today() + '"')
+      + '<label><span>' + th('cr.method') + '</span><select id="crPayMethod"><option value="Cash">' + th('cr.cash') + '</option><option value="Transfer">' + th('cr.transfer') + '</option><option value="POS">' + th('cr.pos') + '</option><option value="Other">' + th('cr.other') + '</option></select></label>'
+      + field('crPayRef', 'cr.reference', 'maxlength="120"') + '<label class="wide"><span>' + th('cr.notes') + '</span><textarea id="crPayNotes" maxlength="500"></textarea></label></div><div class="credit-actions"><button class="btn btn-primary" id="crSavePay" type="button">' + th('cr.savePay') + '</button></div>';
+  }
+
+  function showLedger() {
+    const d = debtors.find(x => x.id === ledgerId); if (!d) { view = 'debtors'; return showDebtors(); }
+    const byTime = (a, b) => String(a.date).localeCompare(String(b.date)) || String(a.at).localeCompare(String(b.at));
+    const tx = [...sales.filter(x => x.debtorId === d.id).map(x => ({ date: x.date, at: x.createdAt || '', type: t('cr.typeSale'), debit: x.total, credit: 0, ref: x.id })),
+      ...payments.filter(x => x.debtorId === d.id).map(x => ({ date: x.date, at: x.createdAt || '', type: t('cr.typePay'), debit: 0, credit: x.amount, ref: x.reference || x.id }))].sort(byTime);
+    let bal = Number(d.openingBalance || 0);
+    const opening = bal ? '<tr><td></td><td>' + th('cr.typeOpen') + '</td><td>' + money(bal) + '</td><td>' + money(0) + '</td><td>' + money(bal) + '</td><td></td></tr>' : '';
+    const body = tx.map(x => { bal += Number(x.debit || 0) - Number(x.credit || 0); return '<tr><td>' + esc(SL().fd(x.date)) + '</td><td>' + esc(x.type) + '</td><td>' + money(x.debit) + '</td><td>' + money(x.credit) + '</td><td>' + money(bal) + '</td><td>' + esc(x.ref) + '</td></tr>'; }).join('');
+    $('creditPanel').innerHTML = '<button class="btn" id="crBack" type="button">' + th('cr.back') + '</button><h3>' + th('cr.ledgerTitle', { name: d.name }) + '</h3><p>' + th('cr.phoneAddr', { phone: d.phone || '—', address: d.address || '—' }) + '</p>'
+      + '<div class="credit-stat"><b>' + th('cr.balanceLine', { amount: money(balance(d)) }) + '</b></div><div class="table-wrap"><table class="credit-table"><thead><tr><th scope="col">' + th('cr.date') + '</th><th scope="col">' + th('cr.type') + '</th><th scope="col">' + th('cr.debit') + '</th><th scope="col">' + th('cr.creditCol') + '</th><th scope="col">' + th('cr.balance') + '</th><th scope="col">' + th('cr.reference') + '</th></tr></thead><tbody>' + opening + body + '</tbody></table></div>';
+  }
+
+  const val = id => $(id).value;
+  const amt = id => Math.max(0, Number(val(id)) || 0);
+  const mk = p => SL().uid(p);
+
+  function addDebtor() {
+    if (!SL().guard()) return;
+    const name = val('crName').trim(); if (!name) { SL().toast(t('cr.nameReq')); return; }
+    debtors.push({ id: mk('D'), name, phone: val('crPhone').trim(), address: val('crAddress').trim(), creditLimit: amt('crLimit'), openingBalance: amt('crOpening'), notes: val('crNotes').trim(), createdAt: new Date().toISOString() });
+    if (persist()) { SL().toast(t('cr.debtorAdded')); render(); }
+  }
+  function saveSale() {
+    if (!SL().guard()) return;
+    const ps = SL().read(SL().KEYS.products, []), debtorId = val('crSaleDebtor'), p = ps.find(x => x.id === val('crSaleProduct')), qty = Math.floor(Number(val('crSaleQty')) || 0), price = amt('crSalePrice'), paid = amt('crSalePaid');
+    if (!debtorId || !p || qty < 1) { SL().toast(t('cr.saleInvalid')); return; }
+    const total = qty * price; if (paid > total) { SL().toast(t('cr.overSale')); return; }
+    const d = debtors.find(x => x.id === debtorId), after = balance(d) + total - paid;
+    if (d.creditLimit > 0 && after > d.creditLimit && !confirm(t('cr.overLimit', { name: d.name, balance: money(after), limit: money(d.creditLimit) }))) return;
+    const now = new Date().toISOString(), saleId = mk('S');
+    sales.push({ id: saleId, date: SL().today(), debtorId, items: [{ productId: p.id, name: p.name, qty, unitPrice: price, total }], total, paid, dueDate: val('crSaleDue') || SL().today(), notes: val('crSaleNotes').trim(), createdAt: now });
+    if (paid > 0) payments.push({ id: mk('P'), date: SL().today(), debtorId, amount: paid, method: 'At sale', reference: t('cr.atSale'), notes: t('cr.paymentAtSale'), createdAt: now });
+    if (persist()) { SL().toast(t('cr.saleDone', { amount: money(total - paid) })); render(); }
+  }
+  function savePay() {
+    if (!SL().guard()) return;
+    const debtorId = val('crPayDebtor'), amount = amt('crPayAmount'); if (!debtorId || amount <= 0) { SL().toast(t('cr.payInvalid')); return; }
+    const d = debtors.find(x => x.id === debtorId), owed = balance(d);
+    if (amount > owed && !confirm(t('cr.overBalance', { balance: money(Math.max(0, owed)) }))) return;
+    payments.push({ id: mk('P'), date: val('crPayDate') || SL().today(), debtorId, amount, method: val('crPayMethod'), reference: val('crPayRef').trim(), notes: val('crPayNotes').trim(), createdAt: new Date().toISOString() });
+    if (persist()) { SL().toast(t('cr.payDone')); render(); }
+  }
+
+  const root = $('creditRoot');
+  root.addEventListener('click', e => {
+    const v = e.target.closest('[data-view]'); if (v) { view = v.dataset.view; render(); return; }
+    const l = e.target.closest('[data-ledger]'); if (l) { ledgerId = l.dataset.ledger; view = 'ledger'; render(); return; }
+    const id = e.target.id;
+    if (id === 'crAdd') addDebtor(); else if (id === 'crSaveSale') saveSale(); else if (id === 'crSavePay') savePay(); else if (id === 'crBack') { view = 'debtors'; render(); }
+  });
+  const visible = () => document.getElementById('credit').classList.contains('active');
+  document.addEventListener('sl:tab', e => { if (e.detail === 'credit') render(); });
+  document.addEventListener('sl:data', () => { if (visible()) render(); });
+  document.addEventListener('sl:lang', () => { if (visible()) render(); });
 })();

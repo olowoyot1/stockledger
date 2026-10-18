@@ -1,35 +1,45 @@
-(function(){
-'use strict';
-const $=id=>document.getElementById(id),AK='delite_cravings_auth_v2',naira=n=>'₦'+Number(n||0).toLocaleString('en-NG'),
-esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-async function call(action,extra){
-  const a=JSON.parse(localStorage.getItem(AK)||'{}');
-  const r=await fetch('/api/cloud',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,username:a.username,pin:a.pin,...extra}),cache:'no-store'});
-  const o=await r.json().catch(()=>({}));
-  if(!r.ok)throw new Error(o.error||'Request failed');
-  return o;
-}
-function render(o){
-  const c=o.account||{};
-  try{localStorage.setItem('dc_account',JSON.stringify(c))}catch{}
-  $('billSummary').textContent=c.users+(c.users===1?' user':' users')+' × '+naira(c.pricePerUser)+' = '+naira(c.monthlyAmount)+' per month'+(c.plan==='trial'&&c.canWrite?' (free during your trial)':'');
-  $('teamList').innerHTML=(o.users||[]).map(u=>'<div class="team-row"><span>'+esc(u.username)+'</span><button class="btn btn-light" data-rm="'+esc(u.id)+'" type="button">Remove</button></div>').join('')||'<p class="muted">No staff users yet — you are the only user.</p>';
-}
-async function load(){
-  if(!$('teamPanel')||sessionStorage.getItem('dc_logged_in')!=='1')return;
-  let c={};try{c=JSON.parse(localStorage.getItem('dc_account')||'{}')}catch{}
-  if(c.role!=='owner')return;
-  $('teamPanel').classList.remove('hidden');
-  try{render(await call('listUsers'))}catch(e){$('teamMsg').textContent=e.message}
-}
-$('addUserBtn').addEventListener('click',async()=>{
-  const b=$('addUserBtn');b.disabled=true;$('teamMsg').textContent='';
-  try{render(await call('addUser',{newUsername:$('tuName').value,newPin:$('tuPin').value}));$('tuName').value='';$('tuPin').value='';$('teamMsg').textContent='User added.'}
-  catch(e){$('teamMsg').textContent=e.message}finally{b.disabled=false}
-});
-$('teamList').addEventListener('click',async e=>{
-  const id=e.target.dataset?.rm;if(!id||!confirm('Remove this user? They will no longer be able to sign in.'))return;
-  try{render(await call('removeUser',{userId:id}))}catch(err){$('teamMsg').textContent=err.message}
-});
-load();
+/* Team & billing panel (Settings). Visible to the account owner only. */
+(() => {
+  'use strict';
+  const SL = () => window.StockLedger, t = (k, v) => window.I18N.t(k, v), $ = id => document.getElementById(id);
+  const naira = n => '₦' + Number(n || 0).toLocaleString('en-NG');
+  let last = null;
+
+  function render(o) {
+    if (o) last = o;
+    if (!last) return;
+    const c = last.account || SL().account(), users = Number(c.users) || 1;
+    const summary = t(users === 1 ? 'team.one' : 'team.many', { n: users, price: naira(c.pricePerUser), total: naira(c.monthlyAmount) });
+    $('billSummary').textContent = summary + (c.plan === 'trial' && c.canWrite ? t('team.trialFree') : '');
+    $('addUserBtn').textContent = t('team.add', { price: naira(c.pricePerUser) });
+    $('teamList').innerHTML = (last.users || []).map(u => '<div class="team-row"><span>' + SL().esc(u.username) + '</span><button class="btn btn-light" data-rm="' + SL().esc(u.id) + '" type="button">' + SL().th('common.remove') + '</button></div>').join('')
+      || '<p class="muted">' + SL().th('team.none') + '</p>';
+  }
+
+  async function load() {
+    const c = SL().account();
+    $('teamPanel').classList.toggle('hidden', c.role !== 'owner' && c.role !== 'superadmin');
+    if (c.role !== 'owner' && c.role !== 'superadmin') return;
+    try { render(await SL().api('listUsers')); } catch (e) { $('teamMsg').textContent = window.SLAuth.errorText(e); }
+  }
+
+  $('addUserBtn').addEventListener('click', async () => {
+    if (!SL().guard()) return;
+    const b = $('addUserBtn'); b.disabled = true; $('teamMsg').textContent = '';
+    try {
+      render(await SL().api('addUser', { newUsername: $('tuName').value, newPassword: $('tuPin').value }));
+      $('tuName').value = ''; $('tuPin').value = ''; $('teamMsg').textContent = t('team.added');
+      localStorage.setItem(SL().KEYS.account, JSON.stringify(last.account));
+    } catch (e) { $('teamMsg').textContent = window.SLAuth.errorText(e); } finally { b.disabled = false; }
+  });
+
+  $('teamList').addEventListener('click', async e => {
+    const id = e.target.dataset && e.target.dataset.rm;
+    if (!id || !SL().guard() || !confirm(t('team.confirmRemove'))) return;
+    try { render(await SL().api('removeUser', { userId: id })); localStorage.setItem(SL().KEYS.account, JSON.stringify(last.account)); }
+    catch (err) { $('teamMsg').textContent = window.SLAuth.errorText(err); }
+  });
+
+  document.addEventListener('sl:ready', load);
+  document.addEventListener('sl:lang', () => render());
 })();
