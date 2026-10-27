@@ -245,9 +245,9 @@
       const o = saved.find(x => x.id === p.id), opening = o ? num(o.opening) : openStock(p, d);
       return { id: p.id, category: p.category, name: p.name, price: num(o?.price ?? p.price), opening, added: num(o?.added), closing: o ? num(o.closing) : opening };
     });
-    const skuOf = new Map(products.map(p => [p.id, p.sku]));
+    const skuOf = new Map(products.map(p => [p.id, p.sku])), barcodeOf = new Map(products.map(p => [p.id, p.barcode]));
     const q = ($('salesSearch').value || '').toLowerCase();
-    const visible = rows.filter(r => (r.name + ' ' + r.category + ' ' + (skuOf.get(r.id) || '')).toLowerCase().includes(q));
+    const visible = rows.filter(r => (r.name + ' ' + r.category + ' ' + (skuOf.get(r.id) || '') + ' ' + (barcodeOf.get(r.id) || '')).toLowerCase().includes(q));
     $('salesBody').innerHTML = visible.map(r => {
       const z = calc(r), nm = esc(r.name);
       const cell = (f, v, label, extra = '') => '<td><input data-f="' + f + '" type="number" min="0" inputmode="numeric" value="' + v + '" ' + extra + ' aria-label="' + th(label) + ': ' + nm + '"></td>';
@@ -342,30 +342,100 @@
   /* ---------------- rendering: products ---------------- */
   function prod() {
     const ro = !canEdit();
+    const cats = allCategories();
     $('productsBody').innerHTML = products.map(x => '<tr data-pid="' + esc(x.id) + '"><td><select data-f="category" aria-label="' + th('products.ariaCategory', { name: x.name }) + '"' + (ro ? ' disabled' : '') + '>'
-      + (CATS.includes(x.category) ? CATS : [...CATS, x.category]).map(c => '<option' + (x.category === c ? ' selected' : '') + '>' + esc(c) + '</option>').join('') + '</select></td>'
+      + categoryOptionsHtml(cats, x.category) + '</select></td>'
       + '<td><input data-f="name" maxlength="120" value="' + esc(x.name) + '"' + (ro ? ' disabled' : '') + '></td><td>' + esc(x.sku || '') + '</td>'
+      + '<td><div class="input-with-btn"><input data-f="barcode" maxlength="64" autocomplete="off" autocapitalize="none" spellcheck="false" value="' + esc(x.barcode || '') + '" aria-label="' + th('products.ariaBarcode', { name: x.name }) + '"' + (ro ? ' disabled' : '') + '>'
+      + '<button class="btn btn-light scan-row" type="button" aria-label="' + th('products.ariaScan', { name: x.name }) + '"' + (ro ? ' disabled' : '') + '>' + th('scan.button') + '</button></div></td>'
       + '<td><input data-f="price" type="number" min="0" step="any" value="' + num(x.price) + '"' + (ro ? ' disabled' : '') + '></td>'
       + '<td><input data-f="opening" type="number" min="0" value="' + num(x.opening) + '"' + (ro ? ' disabled' : '') + '></td>'
       + '<td><button class="btn btn-danger rm" type="button"' + (ro ? ' disabled' : '') + '>' + th('common.remove') + '</button></td></tr>').join('')
-      || '<tr><td colspan="6" class="muted">' + th('products.empty') + '</td></tr>';
+      || '<tr><td colspan="7" class="muted">' + th('products.empty') + '</td></tr>';
     $('addProductBtn').disabled = ro;
   }
   const nameTaken = (name, exceptId) => products.some(p => p.id !== exceptId && String(p.name).trim().toLowerCase() === name.trim().toLowerCase());
 
-  function categoryOptions() { $('catList').innerHTML = [...new Set([...CATS, ...products.map(p => p.category)])].map(c => '<option value="' + esc(c) + '"></option>').join(''); }
-  function openProductDialog() {
+  /* ---------------- categories & barcodes ---------------- */
+  const NEW_CAT = '__new__';
+  const allCategories = () => [...new Set([...CATS, ...products.map(p => p.category).filter(Boolean)])];
+  const categoryOptionsHtml = (cats, selected) => cats.map(c => '<option value="' + esc(c) + '"' + (c === selected ? ' selected' : '') + '>' + esc(c) + '</option>').join('')
+    + '<option value="' + NEW_CAT + '">' + th('products.newCategory') + '</option>';
+  const cleanCode = x => String(x ?? '').replace(/[\u0000-\u001F\u007F]/g, '').trim().slice(0, 64);
+  const findByCode = code => {
+    code = cleanCode(code).toLowerCase();
+    if (!code) return null;
+    return products.find(p => p.barcode && p.barcode.toLowerCase() === code) || products.find(p => p.sku && p.sku.toLowerCase() === code) || null;
+  };
+  const barcodeOwner = (code, exceptId) => { code = cleanCode(code).toLowerCase(); return code ? products.find(p => p.id !== exceptId && p.barcode && p.barcode.toLowerCase() === code) : null; };
+  const scanCode = () => window.SLScanner ? window.SLScanner.scan() : Promise.resolve(null);
+
+  function toggleNewCategory() {
+    const isNew = $('pCategory').value === NEW_CAT;
+    $('pNewCategoryRow').classList.toggle('hidden', !isNew);
+    if (isNew) $('pNewCategory').focus();
+  }
+  function openProductDialog(barcode = '') {
     if (!guard()) return;
-    categoryOptions(); $('productForm').reset(); $('pCategory').value = 'Drinks'; $('productDialog').showModal(); $('pName').focus();
+    $('productForm').reset();
+    $('pCategory').innerHTML = categoryOptionsHtml(allCategories(), CATS[0]);
+    $('pNewCategory').value = ''; $('pNewCategoryRow').classList.add('hidden');
+    $('pBarcode').value = cleanCode(barcode);
+    $('productDialog').showModal(); $('pName').focus();
   }
   function submitProduct(e) {
     e.preventDefault();
     const name = $('pName').value.trim();
     if (!name) { toast(t('products.nameRequired')); return; }
     if (nameTaken(name)) { toast(t('products.duplicate', { name })); return; }
-    products.push({ id: uid('P'), sku: '', category: normalize($('pCategory').value), name, price: num($('pPrice').value), opening: Math.floor(num($('pOpening').value)) });
+    let category = $('pCategory').value;
+    if (category === NEW_CAT) {
+      if (!$('pNewCategory').value.trim()) { toast(t('products.newCategoryRequired')); $('pNewCategory').focus(); return; }
+      category = normalize($('pNewCategory').value);
+    }
+    const barcode = cleanCode($('pBarcode').value), owner = barcodeOwner(barcode);
+    if (owner) { toast(t('products.barcodeTaken', { code: barcode, name: owner.name })); $('pBarcode').focus(); return; }
+    const p = { id: uid('P'), sku: '', category: normalize(category), name, price: num($('pPrice').value), opening: Math.floor(num($('pOpening').value)) };
+    if (barcode) p.barcode = barcode;
+    products.push(p);
     ensureSkus(); if (!write(KEYS.products, products)) { toast(t('toast.storageFull')); return; }
     $('productDialog').close(); prod(); sales(); toast(t('products.added'));
+  }
+
+  function flashRow(tr) { tr.classList.remove('flash'); void tr.offsetWidth; tr.classList.add('flash'); tr.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+  function goToSale(p) {
+    if ($('salesSearch').value) { $('salesSearch').value = ''; ui.search = ''; saveUI(); }
+    sales();
+    const tr = $('salesBody').querySelector('tr[data-id="' + CSS.escape(p.id) + '"]'); if (!tr) return;
+    flashRow(tr);
+    if (locked()) { toast(t(canEdit() ? 'sales.clickEdit' : 'acct.readOnlyToast')); return; }
+    const q = tr.querySelector('.add-qty'); q.value = '1'; q.focus({ preventScroll: true }); q.select();
+    toast(t('scan.found', { name: p.name }));
+  }
+  function unknownCode(code) {
+    if (canEdit() && confirm(t('scan.addNew', { code }))) openProductDialog(code);
+    else toast(t('scan.notFound', { code }));
+  }
+  async function scanForSale() {
+    const code = await scanCode(); if (!code) return;
+    const p = findByCode(code);
+    if (p) goToSale(p); else unknownCode(code);
+  }
+  async function scanForProducts() {
+    const code = await scanCode(); if (!code) return;
+    const p = findByCode(code);
+    if (!p) { if (guard()) openProductDialog(code); return; }
+    const tr = $('productsBody').querySelector('tr[data-pid="' + CSS.escape(p.id) + '"]');
+    if (tr) { flashRow(tr); tr.querySelector('input[data-f="name"]')?.focus({ preventScroll: true }); }
+    toast(t('scan.located', { name: p.name }));
+  }
+  function setBarcode(p, input) {
+    const v = cleanCode(input.value), owner = barcodeOwner(v, p.id);
+    if (owner) { input.value = p.barcode || ''; toast(t('products.barcodeTaken', { code: v, name: owner.name })); return false; }
+    input.value = v;
+    if ((p.barcode || '') === v) return false;
+    if (v) p.barcode = v; else delete p.barcode;
+    return true;
   }
 
   /* ---------------- rendering: reports & analytics ---------------- */
@@ -500,15 +570,16 @@
       if (data.length < 2) throw new Error(t('imp.noRows'));
       if (data.length > MAX_IMPORT_ROWS + 1) throw new Error(t('imp.tooMany'));
       const h = data[0].map(x => String(x).trim().toLowerCase().replace(/[_-]+/g, ' ')), ix = (...ks) => { for (const k of ks) { const i = h.indexOf(k); if (i >= 0) return i; } return -1; };
-      const ci = ix('category'), pi = ix('product', 'product name', 'item'), si = ix('sku', 'code', 'product code'), pr = ix('unit price', 'price', 'selling price'), oi = ix('opening stock', 'opening', 'stock');
+      const ci = ix('category'), pi = ix('product', 'product name', 'item'), si = ix('sku', 'code', 'product code'), bi = ix('barcode', 'bar code', 'ean', 'upc', 'gtin'), pr = ix('unit price', 'price', 'selling price'), oi = ix('opening stock', 'opening', 'stock');
       if ([ci, pi, pr, oi].some(x => x < 0)) throw new Error(t('imp.cols'));
       let count = 0;
       data.slice(1).forEach(r => {
         const name = String(r[pi] ?? '').trim().slice(0, 120); if (!name) return;
-        const sku = String(si >= 0 ? r[si] : '').trim().slice(0, 32);
-        const p = (sku && products.find(x => x.sku === sku)) || products.find(x => x.name.toLowerCase() === name.toLowerCase());
+        const sku = String(si >= 0 ? r[si] : '').trim().slice(0, 32), barcode = bi >= 0 ? cleanCode(r[bi]) : '';
+        let p = (barcode && products.find(x => x.barcode === barcode)) || (sku && products.find(x => x.sku === sku)) || products.find(x => x.name.toLowerCase() === name.toLowerCase());
         if (p) { p.category = normalize(r[ci]); p.name = name; setPrice(p, looseNum(r[pr]), 'Excel import', today()); p.opening = Math.floor(looseNum(r[oi])); }
-        else products.push({ id: uid('P'), sku, category: normalize(r[ci]), name, price: looseNum(r[pr]), opening: Math.floor(looseNum(r[oi])) }); // fresh ID: never collides with a removed product's tombstone
+        else { p = { id: uid('P'), sku, category: normalize(r[ci]), name, price: looseNum(r[pr]), opening: Math.floor(looseNum(r[oi])) }; products.push(p); } // fresh ID: never collides with a removed product's tombstone
+        if (barcode && !barcodeOwner(barcode, p.id)) p.barcode = barcode;
         count++;
       });
       ensureSkus(); write(KEYS.products, products); prod(); sales();
@@ -607,18 +678,30 @@
     $('moveCancel').addEventListener('click', () => $('moveDialog').close());
     $('moveForm').addEventListener('submit', e => { e.preventDefault(); const dlg = $('moveDialog'); if ((dlg.dataset.mode === 'clone' ? cloneDay : moveDay)(dlg.dataset.from, $('moveTo').value)) dlg.close(); });
     $('salesSearch').addEventListener('input', () => { ui.search = $('salesSearch').value; saveUI(); sales(); });
+    $('salesSearch').addEventListener('keydown', e => { // handheld scanners type the code and press Enter
+      if (e.key !== 'Enter' || e.isComposing || e.keyCode === 229) return;
+      const p = findByCode($('salesSearch').value); if (!p) return;
+      e.preventDefault(); goToSale(p);
+    });
+    $('salesScanBtn').addEventListener('click', scanForSale);
     $('businessDate').addEventListener('change', () => { flush(); ui.date = $('businessDate').value; ui.edit = null; saveUI(); sales(); });
     $('reportFrom').addEventListener('change', () => { ui.from = $('reportFrom').value; saveUI(); custom(); });
     $('reportTo').addEventListener('change', () => { ui.to = $('reportTo').value; saveUI(); custom(); });
 
     $('productsBody').addEventListener('input', e => {
       const tr = e.target.closest('tr[data-pid]'), p = tr && products.find(x => x.id === tr.dataset.pid), f = e.target.dataset.f;
-      if (!p || !f || f === 'price' || f === 'name' || !canEdit()) return;
-      p[f] = f === 'category' ? e.target.value : num(e.target.value); persistProducts();
+      if (!p || f !== 'opening' || !canEdit()) return;
+      p.opening = num(e.target.value); persistProducts();
     });
     $('productsBody').addEventListener('change', e => {
       const tr = e.target.closest('tr[data-pid]'), p = tr && products.find(x => String(x.id) === String(tr.dataset.pid)), f = e.target.dataset.f;
       if (!p || !f || !guard()) return;
+      if (f === 'category' && e.target.value === NEW_CAT) {
+        const name = prompt(t('products.newCategoryName'));
+        if (!name || !name.trim()) { e.target.value = p.category; return; }
+        p.category = normalize(name); dirty.p = true; flush(); prod(); sales(); reports(); analytics(); toast(t('products.updated')); return;
+      }
+      if (f === 'barcode') { if (setBarcode(p, e.target)) { dirty.p = true; flush(); toast(t('products.updated')); } return; }
       if (f === 'name') {
         const v = e.target.value.trim();
         if (!v) { e.target.value = p.name; toast(t('products.nameRequired')); return; }
@@ -632,14 +715,28 @@
       } else p[f] = f === 'category' ? e.target.value : num(e.target.value);
       dirty.p = true; flush(); sales(); reports(); analytics(); toast(t('products.updated'));
     });
-    $('productsBody').addEventListener('click', e => {
+    $('productsBody').addEventListener('click', async e => {
+      const sb = e.target.closest('.scan-row');
+      if (sb) {
+        if (!guard()) return;
+        const tr = sb.closest('tr'), code = await scanCode(); if (!code) return;
+        const p = products.find(x => String(x.id) === String(tr.dataset.pid)), input = tr.querySelector('input[data-f="barcode"]');
+        if (!p || !input) return;
+        input.value = code;
+        if (setBarcode(p, input)) { dirty.p = true; flush(); toast(t('products.updated')); }
+        return;
+      }
       if (!e.target.closest('.rm') || !guard()) return;
       const id = e.target.closest('tr').dataset.pid;
       if (!confirm(t('products.confirmRemove'))) return;
       deletedProductIds = [...new Set([...deletedProductIds, String(id)])]; products = products.filter(x => String(x.id) !== String(id));
       write(KEYS.deleted, deletedProductIds); write(KEYS.products, products); prod(); sales(); reports(); analytics(); toast(t('products.removed'));
     });
-    $('addProductBtn').addEventListener('click', openProductDialog);
+    $('addProductBtn').addEventListener('click', () => openProductDialog());
+    $('productsScanBtn').addEventListener('click', scanForProducts);
+    $('pCategory').addEventListener('change', toggleNewCategory);
+    $('pScanBtn').addEventListener('click', async () => { const code = await scanCode(); if (code) $('pBarcode').value = code; });
+    $('pBarcode').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing && e.keyCode !== 229) e.preventDefault(); }); // a handheld scanner's Enter must not submit the form early
     $('productForm').addEventListener('submit', submitProduct);
     $('productCancel').addEventListener('click', () => $('productDialog').close());
     $('historyProduct').addEventListener('change', () => { ui.hp = $('historyProduct').value; saveUI(); history(); });
@@ -658,7 +755,7 @@
     $('exportCustomBtn').addEventListener('click', () => { const out = [header]; dateList($('reportFrom').value, $('reportTo').value).forEach(d => (days[d]?.rows || []).forEach(r => out.push(line(d, r)))); download('stockledger-report.csv', csv(out)); });
     $('exportAllBtn').addEventListener('click', () => { const out = [header]; Object.values(days).filter(d => d && isYmd(d.date)).sort((a, b) => a.date.localeCompare(b.date)).forEach(d => (d.rows || []).forEach(r => out.push(line(d.date, r)))); download('stockledger-all-reports.csv', csv(out)); });
     $('importBtn').addEventListener('click', importFile);
-    $('downloadTemplateBtn').addEventListener('click', () => download('stockledger-stock-template.csv', csv([['Category', 'Product', 'SKU', 'Unit Price', 'Opening Stock'], ['Drinks', 'Coke 50cl', 'DR-001', 500, 20], ['Snacks', 'Meat Pie', 'SN-001', 700, 20], ['Bread', 'Medium Bread', 'BR-001', 1000, 15]])));
+    $('downloadTemplateBtn').addEventListener('click', () => download('stockledger-stock-template.csv', csv([['Category', 'Product', 'SKU', 'Barcode', 'Unit Price', 'Opening Stock'], ['Drinks', 'Coke 50cl', 'DR-001', '5449000000996', 500, 20], ['Snacks', 'Meat Pie', 'SN-001', '', 700, 20], ['Bread', 'Medium Bread', 'BR-001', '', 1000, 15]])));
     $('logoutBtn').addEventListener('click', logout);
     $('saveSettingsBtn').addEventListener('click', saveSettings);
     $('resetDataBtn').addEventListener('click', resetData);
@@ -671,7 +768,7 @@
   }
 
   /* ---------------- public API for the other modules ---------------- */
-  window.StockLedger = { KEYS, read, write, api, toast, guard, canEdit, money, esc, th, today, uid, num, fd, enhanceDates, queueSync, sync: cloudPush, account };
+  window.StockLedger = { KEYS, read, write, api, toast, guard, canEdit, money, esc, th, today, uid, num, fd, enhanceDates, queueSync, sync: cloudPush, account, findByCode, scan: scanCode };
 
   function boot() {
     enhanceDates();
