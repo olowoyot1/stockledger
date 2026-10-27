@@ -100,7 +100,7 @@
       </div>
       <div id="categorySummary" class="category-grid"></div>
       <div class="panel table-panel">
-        <div class="panel-head"><h3 data-i18n="sales.tableTitle">Stock &amp; Sales</h3><input id="salesSearch" class="search" type="search" data-i18n-placeholder="sales.search" placeholder="Search product…" data-i18n-aria="sales.searchAria" aria-label="Search products"></div>
+        <div class="panel-head"><h3 data-i18n="sales.tableTitle">Stock &amp; Sales</h3><div class="search-tools"><input id="salesSearch" class="search" type="search" data-i18n-placeholder="sales.search" placeholder="Search product…" data-i18n-aria="sales.searchAria" aria-label="Search products"><button id="salesScanBtn" class="btn btn-light" type="button" data-i18n="scan.button">Scan</button></div></div>
         <div class="table-wrap"><table>
           <thead><tr>
             <th scope="col" data-i18n="col.category">Category</th><th scope="col" data-i18n="col.product">Product</th><th scope="col" data-i18n="col.opening">Opening</th><th scope="col" data-i18n="col.additions">Additions</th>
@@ -115,10 +115,10 @@
     <section id="products" class="tab-section">
       <div class="page-head">
         <div><h2 data-i18n="products.title">Products</h2><p class="muted" data-i18n="products.help">Manage products, prices and opening stock.</p></div>
-        <button id="addProductBtn" class="btn btn-primary" type="button" data-i18n="products.add">+ Add Product</button>
+        <div class="btn-group"><button id="productsScanBtn" class="btn btn-light" type="button" data-i18n="scan.button">Scan</button><button id="addProductBtn" class="btn btn-primary" type="button" data-i18n="products.add">+ Add Product</button></div>
       </div>
       <div class="panel table-panel"><div class="table-wrap"><table>
-        <thead><tr><th scope="col" data-i18n="col.category">Category</th><th scope="col" data-i18n="col.product">Product</th><th scope="col" data-i18n="col.sku">SKU</th><th scope="col" data-i18n="col.unitPrice">Unit Price</th><th scope="col" data-i18n="col.openingStock">Opening Stock</th><th scope="col" data-i18n="col.actions">Actions</th></tr></thead>
+        <thead><tr><th scope="col" data-i18n="col.category">Category</th><th scope="col" data-i18n="col.product">Product</th><th scope="col" data-i18n="col.sku">SKU</th><th scope="col" data-i18n="products.barcode">Barcode</th><th scope="col" data-i18n="col.unitPrice">Unit Price</th><th scope="col" data-i18n="col.openingStock">Opening Stock</th><th scope="col" data-i18n="col.actions">Actions</th></tr></thead>
         <tbody id="productsBody"></tbody>
       </table></div></div>
     </section>
@@ -177,7 +177,7 @@
         <div class="panel">
           <h3 data-i18n="imp.required">Required columns</h3>
           <p><code>Category</code>, <code>Product</code>, <code>Unit Price</code>, <code>Opening Stock</code></p>
-          <p class="muted" data-i18n="imp.optional">Optional: SKU.</p>
+          <p class="muted" data-i18n="imp.optional">Optional: SKU, Barcode.</p>
           <button id="downloadTemplateBtn" class="btn btn-light" type="button" data-i18n="imp.template">Download Template</button>
         </div>
       </div>
@@ -234,7 +234,12 @@
     <form id="productForm" method="dialog">
       <h3 id="productTitle" data-i18n="products.newTitle">Add product</h3>
       <label><span data-i18n="products.name">Product name</span><input id="pName" required maxlength="120" autocomplete="off"></label>
-      <label><span data-i18n="products.category">Category</span><input id="pCategory" list="catList" maxlength="40" value="Drinks" autocomplete="off"><datalist id="catList"></datalist></label>
+      <label><span data-i18n="products.category">Category</span><select id="pCategory"></select></label>
+      <label id="pNewCategoryRow" class="hidden"><span data-i18n="products.newCategoryName">New category name</span><input id="pNewCategory" maxlength="40" autocomplete="off"></label>
+      <div class="field">
+        <label for="pBarcode" data-i18n="products.barcode">Barcode</label>
+        <div class="input-with-btn"><input id="pBarcode" maxlength="64" autocomplete="off" autocapitalize="none" spellcheck="false"><button id="pScanBtn" class="btn btn-light" type="button" data-i18n="scan.button">Scan</button></div>
+      </div>
       <label><span data-i18n="products.price">Unit price</span><input id="pPrice" type="number" min="0" step="any" value="0" inputmode="decimal"></label>
       <label><span data-i18n="products.opening">Opening stock</span><input id="pOpening" type="number" min="0" step="1" value="0" inputmode="numeric"></label>
       <div class="dialog-actions"><button id="productCancel" class="btn" type="button" data-i18n="common.cancel">Cancel</button><button class="btn btn-primary" type="submit" data-i18n="common.save">Save</button></div>
@@ -246,6 +251,7 @@
 
 <script src="/i18n.js"></script>
 <script src="/auth.js"></script>
+<script src="/scanner.js"></script>
 <script src="/app.js"></script>
 <script src="/team.js"></script>
 <script src="/debtors.js"></script>
