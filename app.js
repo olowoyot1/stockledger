@@ -254,8 +254,8 @@
       return '<tr data-id="' + esc(r.id) + '"><td>' + esc(r.category) + '</td><td><b>' + nm + '</b><small class="muted"> ' + esc(skuOf.get(r.id) || '') + '</small></td>'
         + cell('opening', r.opening, 'col.opening') + cell('added', r.added, 'col.additions') + '<td class="av">' + z.available + '</td>'
         + cell('closing', z.closing, 'col.closing', 'max="' + z.available + '"')
-        + '<td class="sold"><input data-f="sold" type="number" min="0" inputmode="numeric" max="' + z.available + '" value="' + z.sold + '" aria-label="' + th('sales.ariaSold', { name: r.name }) + '"></td>'
-        + '<td><div class="add-sale"><input class="add-qty" type="number" min="1" inputmode="numeric" placeholder="' + th('sales.qty') + '" aria-label="' + th('sales.ariaAdd', { name: r.name }) + '"><button class="btn add-sale-btn" type="button">' + th('sales.add') + '</button></div></td>'
+        + '<td class="sold"><input data-f="sold" type="number" min="0" step="any" inputmode="decimal" max="' + z.available + '" value="' + z.sold + '" aria-label="' + th('sales.ariaSold', { name: r.name }) + '"></td>'
+        + '<td><div class="add-sale"><input class="add-qty" type="number" min="0.01" step="any" inputmode="decimal" placeholder="' + th('sales.qty') + '" aria-label="' + th('sales.ariaAdd', { name: r.name }) + '"><button class="btn add-sale-btn" type="button">' + th('sales.add') + '</button></div></td>'
         + '<td><input data-f="price" type="number" min="0" step="any" inputmode="decimal" value="' + r.price + '" aria-label="' + th('col.unitPrice') + ': ' + nm + '"></td><td class="rev"><b>' + money(z.sales) + '</b></td></tr>';
     }).join('') || '<tr><td colspan="10" class="muted">' + th(products.length ? 'sales.empty' : 'products.empty') + '</td></tr>';
     summary(); saveLabel();
@@ -294,7 +294,7 @@
   }
   function addSale(tr) {
     if (locked()) { toast(t(canEdit() ? 'sales.clickEdit' : 'acct.readOnlyToast')); return; }
-    const q = tr.querySelector('.add-qty'), n = Math.floor(num(q.value)), r = rows.find(x => x.id === tr.dataset.id);
+    const q = tr.querySelector('.add-qty'), n = num(q.value), r = rows.find(x => x.id === tr.dataset.id);
     if (!r || !n) { q.focus(); return; }
     const z = calc(r);
     if (n > z.closing) { toast(t('sales.onlyLeft', { n: z.closing, name: r.name })); return; }
@@ -658,7 +658,7 @@
       if (locked()) return;
       const i = e.target.closest('input[data-f]'), tr = i?.closest('tr'); if (!i || !tr) return;
       const r = rows.find(x => x.id === tr.dataset.id); if (!r) return;
-      const f = i.dataset.f, v = f === 'price' ? num(i.value) : Math.floor(num(i.value));
+      const f = i.dataset.f, v = (f === 'price' || f === 'sold') ? num(i.value) : Math.floor(num(i.value));
       if (f === 'sold') { const av = calc(r).available; r.closing = av - Math.min(v, av); } else r[f] = v;
       refreshRow(tr, r, i); summary(); persistDay();
     });
