@@ -292,7 +292,7 @@ async function accountFor(ws, role, username, extra = {}) {
   const members = await sb(MEM + '?workspace_id=eq.' + enc(ws.id) + '&select=id');
   return access(ws, Date.now(), { users: 1 + members.length, role, username, ...extra });
 }
-const issueToken = (ws, member, hash, adminWorkspaceId = null) => signToken({ w: ws.id, m: member?.id || null, f: fingerprint(hash), e: Date.now() + SESSION_TTL_MS, ...(adminWorkspaceId ? { s: adminWorkspaceId } : {}) });
+const issueToken = (ws, member, hash, adminWorkspaceId = null, adminHash = null) => signToken({ w: ws.id, m: member?.id || null, f: fingerprint(hash), e: Date.now() + SESSION_TTL_MS, ...(adminWorkspaceId ? { s: adminWorkspaceId, sf: fingerprint(adminHash) } : {}) });
 
 async function findPrincipal(username) {
   let ws = (await sb(WS + '?username=eq.' + enc(username) + '&select=*'))[0], member = null;
@@ -318,11 +318,12 @@ async function fromToken(token) {
   let adminWorkspaceId = null;
   if (claims.s) {
     if (!UUID.test(claims.s)) return null;
-    const admin = (await sb(WS + '?id=eq.' + enc(claims.s) + '&select=id,role,username'))[0];
-    if (!admin || admin.role !== 'superadmin') return null;
+    const admin = (await sb(WS + '?id=eq.' + enc(claims.s) + '&select=id,role,username,pin_hash'))[0];
+    if (!admin || admin.role !== 'superadmin' || fingerprint(admin.pin_hash) !== claims.sf) return null;
     adminWorkspaceId = admin.id;
   }
-  return { ws, member, hash, role: adminWorkspaceId ? 'superadmin' : (member ? 'staff' : (ws.role || 'owner')), username: adminWorkspaceId ? (await sb(WS + '?id=eq.' + enc(adminWorkspaceId) + '&select=username'))[0]?.username : (member || ws).username, adminWorkspaceId };
+  const adminHash = adminWorkspaceId ? (await sb(WS + '?id=eq.' + enc(adminWorkspaceId) + '&select=pin_hash'))[0]?.pin_hash : null;
+  return { ws, member, hash, adminHash, role: adminWorkspaceId ? 'superadmin' : (member ? 'staff' : (ws.role || 'owner')), username: adminWorkspaceId ? (await sb(WS + '?id=eq.' + enc(adminWorkspaceId) + '&select=username'))[0]?.username : (member || ws).username, adminWorkspaceId };
 }
 
 /* ------------------------------------------------------------------ */
@@ -403,7 +404,7 @@ async function handler(req, res) {
       if (!target) return fail(res, 404, 'NOT_FOUND', 'Company not found.');
       if (target.id === (a.adminWorkspaceId || ws.id)) return fail(res, 400, 'BAD_REQUEST', 'You are already in your Super Admin workspace.');
       await writeAudit({ actorWorkspaceId: a.adminWorkspaceId || ws.id, workspaceId: target.id, actor: a.username, action: 'company.switch', details: { businessName: target.business_name }, ip });
-      const scopedToken = issueToken(target, null, target.pin_hash, a.adminWorkspaceId || ws.id);
+      const scopedToken = issueToken(target, null, target.pin_hash, a.adminWorkspaceId || ws.id, a.adminHash || a.hash);
       return send(res, 200, { ok: true, workspaceId: target.id, token: scopedToken, account: await accountFor(target, 'superadmin', a.username, { actingAs: true, adminWorkspaceId: a.adminWorkspaceId || ws.id }) });
     }
 
@@ -520,6 +521,7 @@ async function handler(req, res) {
       if (!(await verifyPin(current, a.hash))) { noteFailure(a.username, ip); return fail(res, 401, 'LOGIN_INVALID', 'Current password is incorrect.'); }
       if (newUsername !== a.username && await usernameTaken(newUsername)) return fail(res, 409, 'USERNAME_TAKEN', 'That login is already taken.');
       const pin_hash = await hashPin(newPassword);
+      await writeAudit({ actorWorkspaceId: a.adminWorkspaceId || ws.id, workspaceId: ws.id, actor: a.username, action: 'auth.change', details: { usernameChanged: newUsername !== a.username }, ip });
       try {
         const target = a.member ? MEM + '?id=eq.' + enc(a.member.id) : WS + '?id=eq.' + enc(ws.id);
         await sb(target, { method: 'PATCH', body: JSON.stringify({ username: newUsername, pin_hash }) });
@@ -533,6 +535,7 @@ async function handler(req, res) {
     if (action === 'resetData') {
       if (!isOwner) return fail(res, 403, 'FORBIDDEN', 'Only an account owner can reset data.');
       if (!canWrite) return fail(res, 402, 'SUBSCRIPTION_ENDED', 'Your trial or subscription has ended.', { account: access(ws, Date.now(), { role }) });
+      await writeAudit({ actorWorkspaceId: a.adminWorkspaceId || ws.id, workspaceId: ws.id, actor: a.username, action: 'data.reset', details: {}, ip });
       const resetAt = new Date().toISOString();
       await sb(TABLE, { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates' }, body: JSON.stringify({ id: ws.id, data: { ...emptyState(), resetAt }, updated_at: resetAt }) });
       return send(res, 200, { ok: true, resetAt });
