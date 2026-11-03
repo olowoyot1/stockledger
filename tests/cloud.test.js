@@ -271,6 +271,39 @@ test('superadmin can change login (previously crashed) and list companies; owner
   assert.equal(ch.status, 200);
 });
 
+test('superadmin can switch into a company, return to HQ, and all actions are audited', async () => {
+  await signup('boss@stockledger.ng', 'super-secret-1', 'HQ');
+  db.tables.dc_workspaces[0].role = 'superadmin';
+  const boss = await call({ action: 'login', username: 'boss@stockledger.ng', password: 'super-secret-1' });
+  const company = await signup('shop@stockledger.ng', 'company-pass-1', 'Corner Shop');
+  const switched = await call({ action: 'switchCompany', companyId: company.body.workspaceId }, boss.body.token);
+  assert.equal(switched.status, 200);
+  assert.equal(switched.body.account.actingAs, true);
+  assert.equal(switched.body.account.businessName, 'Corner Shop');
+  assert.equal((await call({ action: 'pull' }, switched.body.token)).status, 200);
+  const back = await call({ action: 'returnToAdmin' }, switched.body.token);
+  assert.equal(back.status, 200);
+  assert.equal(back.body.account.businessName, 'HQ');
+  assert.equal((await call({ action: 'pull' }, back.body.token)).status, 200);
+  assert.ok(db.tables.dc_audit_logs.some(x => x.action === 'company.switch'));
+  assert.ok(db.tables.dc_audit_logs.some(x => x.action === 'company.return'));
+});
+
+test('superadmin can suspend and reactivate a company subscription', async () => {
+  await signup('boss@stockledger.ng', 'super-secret-1', 'HQ');
+  db.tables.dc_workspaces[0].role = 'superadmin';
+  const boss = await call({ action: 'login', username: 'boss@stockledger.ng', password: 'super-secret-1' });
+  const company = await signup('shop@stockledger.ng', 'company-pass-1', 'Corner Shop');
+  const suspended = await call({ action: 'setCompanyPlan', companyId: company.body.workspaceId, plan: 'suspended' }, boss.body.token);
+  assert.equal(suspended.status, 200);
+  const owner = await call({ action: 'login', username: 'shop@stockledger.ng', password: 'company-pass-1' });
+  assert.equal(owner.body.account.canWrite, false);
+  const active = await call({ action: 'setCompanyPlan', companyId: company.body.workspaceId, plan: 'active' }, boss.body.token);
+  assert.equal(active.status, 200);
+  assert.ok(db.tables.dc_audit_logs.some(x => x.action === 'subscription.suspended'));
+  assert.ok(db.tables.dc_audit_logs.some(x => x.action === 'subscription.active'));
+});
+
 test('resetData wipes cloud data and forces stale devices to reload', async () => {
   const { token } = (await signup()).body;
   await call({ action: 'push', products: [{ id: 'P', name: 'P' }] }, token);
