@@ -57,6 +57,7 @@
     <div class="top-actions">
       <label class="lang-picker"><span class="sr-only" data-i18n="lang.label">Language</span><select data-lang-select aria-label="Language" data-i18n-aria="lang.label"></select></label>
       <span id="userDisplay" class="user-pill"></span>
+      <button id="returnAdminBtn" class="btn btn-light hidden" type="button">Return to Super Admin</button>
       <button id="logoutBtn" class="btn btn-light" type="button" data-i18n="common.logout">Logout</button>
     </div>
   </header>
@@ -229,6 +230,11 @@
           <thead><tr><th scope="col" data-i18n="co.business">Business</th><th scope="col" data-i18n="co.owner">Owner login</th><th scope="col" data-i18n="co.plan">Plan / expiry</th><th scope="col" data-i18n="co.staff">Staff</th><th scope="col" data-i18n="co.joined">Joined</th><th>Actions</th></tr></thead>
           <tbody id="companiesBody"></tbody>
         </table></div>
+      </div>
+      <div class="panel table-panel">
+        <div class="panel-head"><h3>Super Admin audit trail</h3><span class="muted">Latest 100 events</span></div>
+        <div id="auditMessage" class="notice pad" role="status"></div>
+        <div class="table-wrap"><table><thead><tr><th>Date / time</th><th>Company ID</th><th>Actor</th><th>Action</th><th>Details</th></tr></thead><tbody id="auditBody"></tbody></table></div>
       </div>
     </section>
   </main>
