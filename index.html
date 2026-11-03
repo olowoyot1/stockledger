@@ -212,10 +212,20 @@
 
     <section id="companies" class="tab-section">
       <div class="page-head"><div><h2 data-i18n="co.title">Companies</h2><p class="muted" data-i18n="co.help">Every business registered in StockLedger.</p></div><button id="refreshCompaniesBtn" class="btn btn-primary" type="button" data-i18n="co.refresh">Refresh</button></div>
+      <div class="panel settings-panel">
+        <h3>Register a company</h3>
+        <form id="companyCreateForm">
+          <label><span>Business name</span><input id="coBusinessName" required maxlength="80"></label>
+          <label><span>Owner username / email</span><input id="coUsername" required minlength="3" maxlength="100" autocomplete="off"></label>
+          <label><span>Temporary owner password</span><input id="coPassword" type="password" required minlength="8" maxlength="128" autocomplete="new-password"></label>
+          <button id="createCompanyBtn" class="btn btn-primary" type="submit">Create Company</button>
+          <div id="companyCreateMessage" class="notice" role="status"></div>
+        </form>
+      </div>
       <div class="panel table-panel">
         <div id="companiesMessage" class="notice pad" role="status"></div>
         <div class="table-wrap"><table>
-          <thead><tr><th scope="col" data-i18n="co.business">Business</th><th scope="col" data-i18n="co.owner">Owner login</th><th scope="col" data-i18n="co.plan">Plan</th><th scope="col" data-i18n="co.staff">Staff</th><th scope="col" data-i18n="co.joined">Joined</th></tr></thead>
+          <thead><tr><th scope="col" data-i18n="co.business">Business</th><th scope="col" data-i18n="co.owner">Owner login</th><th scope="col" data-i18n="co.plan">Plan / expiry</th><th scope="col" data-i18n="co.staff">Staff</th><th scope="col" data-i18n="co.joined">Joined</th><th>Actions</th></tr></thead>
           <tbody id="companiesBody"></tbody>
         </table></div>
       </div>
