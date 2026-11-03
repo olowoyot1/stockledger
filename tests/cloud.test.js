@@ -82,6 +82,15 @@ test('cleanState drops malformed data and hostile keys', () => {
   assert.equal(s.payments[0].amount, 0);
 });
 
+test('cloud sanitization preserves product barcode, decimal quantities and cost-price snapshots', () => {
+  const s = I.cleanState({ products: [{ id: 'P-1', name: 'Rice', price: 1500, costPrice: 1125.5, opening: 2.5, barcode: '1234567890123' }], days: { '2026-11-03': day('2026-11-03', [{ id: 'P-1', name: 'Rice', price: 1500, costPrice: 1125.5, opening: 2.5, added: 0.5, closing: 1.25 }]) } });
+  assert.equal(s.products[0].barcode, '1234567890123');
+  assert.equal(s.products[0].costPrice, 1125.5);
+  assert.equal(s.products[0].opening, 2.5);
+  assert.equal(s.days['2026-11-03'].rows[0].costPrice, 1125.5);
+  assert.equal(s.days['2026-11-03'].rows[0].closing, 1.25);
+});
+
 test('merge retains remote-only records and prefers incoming matching IDs', () => {
   assert.deepEqual(I.mergeById([{ id: 'a', v: 1 }, { id: 'b', v: 1 }], [{ id: 'b', v: 2 }, { id: 'c', v: 3 }]), [{ id: 'a', v: 1 }, { id: 'b', v: 2 }, { id: 'c', v: 3 }]);
 });
