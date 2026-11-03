@@ -125,6 +125,7 @@ const cleanProduct = p => {
   if (p.barcode) out.barcode = text(p.barcode, 64);
   if (p.costPrice != null) out.costPrice = amount(p.costPrice);
   if (Array.isArray(p.priceLog)) out.priceLog = list(p.priceLog, l => isObj(l) ? { at: stamp(l.at), date: text(l.date, 10), from: amount(l.from), to: amount(l.to), src: text(l.src, 40) } : null, 200);
+  if (Array.isArray(p.costPriceLog)) out.costPriceLog = list(p.costPriceLog, l => isObj(l) ? { at: stamp(l.at), from: amount(l.from), to: amount(l.to), src: text(l.src, 40) } : null, 200);
   return out;
 };
 const cleanRow = r => isObj(r) && text(r.id, 64)
