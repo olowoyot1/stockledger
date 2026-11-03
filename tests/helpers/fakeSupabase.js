@@ -3,7 +3,7 @@ const crypto = require('node:crypto');
 
 // In-memory stand-in for Supabase's PostgREST API (unique constraints, filters, upserts).
 function makeFakeDb() {
-  const tables = { dc_workspaces: [], dc_members: [], delite_cravings_state: [] };
+  const tables = { dc_workspaces: [], dc_members: [], delite_cravings_state: [], dc_audit_logs: [] };
   const unique = { dc_workspaces: ['username'], dc_members: ['username'], delite_cravings_state: ['id'] };
   let hook = null;
   const fakeFetch = async (url, opts = {}) => {
