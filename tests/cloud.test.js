@@ -89,6 +89,8 @@ test('cloud sanitization preserves product barcode, decimal quantities and cost-
   assert.equal(s.products[0].opening, 2.5);
   assert.equal(s.days['2026-11-03'].rows[0].costPrice, 1125.5);
   assert.equal(s.days['2026-11-03'].rows[0].closing, 1.25);
+  assert.equal(s.products[0].barcode, '1234567890123');
+  assert.equal(s.products[0].costPrice, 1125.5);
 });
 
 test('merge retains remote-only records and prefers incoming matching IDs', () => {
