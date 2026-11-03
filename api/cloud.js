@@ -386,6 +386,46 @@ async function handler(req, res) {
       return send(res, 200, { ok: true, companies: companies.map(c => ({ ...c, staffCount: counts[c.id] || 0 })) });
     }
 
+    if (action === 'createCompany' || action === 'extendCompany' || action === 'deleteCompany') {
+      if (role !== 'superadmin') return fail(res, 403, 'FORBIDDEN', 'Superadmin access is required.');
+      const companyId = String(body.companyId || '');
+      if (action === 'createCompany') {
+        const businessName = text(String(body.businessName || '').trim(), 80);
+        const username = norm(body.username), password = String(body.password || '');
+        if (businessName.length < 2) return fail(res, 400, 'BUSINESS_NAME', 'Enter a business name (2–80 characters).');
+        if (!validUsername(username)) return fail(res, 400, 'USERNAME_INVALID', 'Login must be 3–100 characters with no spaces.');
+        if (!validPassword(password) || password.toLowerCase() === username) return fail(res, 400, 'PASSWORD_INVALID', 'Password must be 8–128 characters and differ from the login.');
+        if (await usernameTaken(username)) return fail(res, 409, 'USERNAME_TAKEN', 'That login is already registered.');
+        try {
+          const pin_hash = await hashPin(password);
+          await sb(WS, { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ username, business_name: businessName, pin_hash }) });
+          return send(res, 200, { ok: true });
+        } catch (e) {
+          if (isDuplicate(e)) return fail(res, 409, 'USERNAME_TAKEN', 'That login is already registered.');
+          throw e;
+        }
+      }
+      if (!UUID.test(companyId)) return fail(res, 400, 'BAD_REQUEST', 'Invalid company.');
+      const target = (await sb(WS + '?id=eq.' + enc(companyId) + '&select=*'))[0];
+      if (!target) return fail(res, 404, 'NOT_FOUND', 'Company not found.');
+      if (companyId === ws.id) return fail(res, 400, 'BAD_REQUEST', 'You cannot delete or modify your own Super Admin company.');
+      if (action === 'extendCompany') {
+        const months = Number(body.months);
+        if (!Number.isInteger(months) || months < 1 || months > 60) return fail(res, 400, 'BAD_REQUEST', 'Choose between 1 and 60 months.');
+        const now = Date.now(), existing = Date.parse(target.paid_until || target.trial_ends_at || '') || now;
+        const base = Math.max(now, existing);
+        const end = new Date(base);
+        end.setUTCMonth(end.getUTCMonth() + months);
+        const paid_until = end.toISOString();
+        await sb(WS + '?id=eq.' + enc(companyId), { method: 'PATCH', body: JSON.stringify({ plan: 'active', paid_until }) });
+        return send(res, 200, { ok: true, paid_until });
+      }
+      if (action === 'deleteCompany') {
+        await sb(WS + '?id=eq.' + enc(companyId), { method: 'DELETE' });
+        return send(res, 200, { ok: true });
+      }
+    }
+
     if (action === 'listUsers' || action === 'addUser' || action === 'removeUser') {
       if (!isOwner) return fail(res, 403, 'FORBIDDEN', 'Only an account owner can manage users.');
       if (action === 'addUser') {
