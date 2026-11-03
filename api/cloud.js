@@ -457,7 +457,8 @@ async function handler(req, res) {
       if (action === 'setCompanyPlan') {
         const plan = String(body.plan || '');
         if (!['active', 'suspended'].includes(plan)) return fail(res, 400, 'BAD_REQUEST', 'Choose active or suspended.');
-        const patch = plan === 'suspended' ? { plan: 'suspended' } : { plan: 'active', paid_until: target.paid_until || new Date().toISOString() };
+        const currentPaid = Date.parse(target.paid_until || '') || 0;
+        const patch = plan === 'suspended' ? { plan: 'suspended' } : { plan: 'active', paid_until: currentPaid > Date.now() ? target.paid_until : new Date(Date.now() + 30 * 86400000).toISOString() };
         await writeAudit({ actorWorkspaceId: a.adminWorkspaceId || ws.id, workspaceId: target.id, actor: a.username, action: 'subscription.' + plan, details: { previousPlan: target.plan, paid_until: target.paid_until || null }, ip });
         await sb(WS + '?id=eq.' + enc(companyId), { method: 'PATCH', body: JSON.stringify(patch) });
         return send(res, 200, { ok: true, plan });
