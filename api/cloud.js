@@ -122,11 +122,13 @@ const cleanProduct = p => {
   if (!isObj(p) || !text(p.id, 64)) return null;
   const out = { id: text(p.id, 64), category: text(p.category, 40) || 'Other', name: text(p.name, 120), price: amount(p.price), opening: amount(p.opening) };
   if (p.sku) out.sku = text(p.sku, 32);
+  if (p.barcode) out.barcode = text(p.barcode, 64);
+  if (p.costPrice != null) out.costPrice = amount(p.costPrice);
   if (Array.isArray(p.priceLog)) out.priceLog = list(p.priceLog, l => isObj(l) ? { at: stamp(l.at), date: text(l.date, 10), from: amount(l.from), to: amount(l.to), src: text(l.src, 40) } : null, 200);
   return out;
 };
 const cleanRow = r => isObj(r) && text(r.id, 64)
-  ? { id: text(r.id, 64), category: text(r.category, 40) || 'Other', name: text(r.name, 120), price: amount(r.price), opening: amount(r.opening), added: amount(r.added), closing: amount(r.closing) }
+  ? { id: text(r.id, 64), category: text(r.category, 40) || 'Other', name: text(r.name, 120), price: amount(r.price), opening: amount(r.opening), added: amount(r.added), closing: amount(r.closing), ...(r.costPrice != null ? { costPrice: amount(r.costPrice) } : {}) }
   : null;
 const cleanDay = (date, d) => {
   if (!isObj(d)) return null;
