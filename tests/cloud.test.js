@@ -82,6 +82,17 @@ test('cleanState drops malformed data and hostile keys', () => {
   assert.equal(s.payments[0].amount, 0);
 });
 
+test('cloud sanitization preserves product barcode, decimal quantities and cost-price snapshots', () => {
+  const s = I.cleanState({ products: [{ id: 'P-1', name: 'Rice', price: 1500, costPrice: 1125.5, opening: 2.5, barcode: '1234567890123' }], days: { '2026-11-03': day('2026-11-03', [{ id: 'P-1', name: 'Rice', price: 1500, costPrice: 1125.5, opening: 2.5, added: 0.5, closing: 1.25 }]) } });
+  assert.equal(s.products[0].barcode, '1234567890123');
+  assert.equal(s.products[0].costPrice, 1125.5);
+  assert.equal(s.products[0].opening, 2.5);
+  assert.equal(s.days['2026-11-03'].rows[0].costPrice, 1125.5);
+  assert.equal(s.days['2026-11-03'].rows[0].closing, 1.25);
+  assert.equal(s.products[0].barcode, '1234567890123');
+  assert.equal(s.products[0].costPrice, 1125.5);
+});
+
 test('merge retains remote-only records and prefers incoming matching IDs', () => {
   assert.deepEqual(I.mergeById([{ id: 'a', v: 1 }, { id: 'b', v: 1 }], [{ id: 'b', v: 2 }, { id: 'c', v: 3 }]), [{ id: 'a', v: 1 }, { id: 'b', v: 2 }, { id: 'c', v: 3 }]);
 });
@@ -258,6 +269,51 @@ test('superadmin can change login (previously crashed) and list companies; owner
   assert.equal((await call({ action: 'listCompanies' }, owner.token)).status, 403);
   const ch = await call({ action: 'changeAuth', newUsername: 'boss2@stockledger.ng', newPassword: 'super-secret-2', currentPassword: 'super-secret-1' }, boss.body.token);
   assert.equal(ch.status, 200);
+});
+
+test('superadmin can switch into a company, return to HQ, and all actions are audited', async () => {
+  await signup('boss@stockledger.ng', 'super-secret-1', 'HQ');
+  db.tables.dc_workspaces[0].role = 'superadmin';
+  const boss = await call({ action: 'login', username: 'boss@stockledger.ng', password: 'super-secret-1' });
+  const company = await signup('shop@stockledger.ng', 'company-pass-1', 'Corner Shop');
+  const switched = await call({ action: 'switchCompany', companyId: company.body.workspaceId }, boss.body.token);
+  assert.equal(switched.status, 200);
+  assert.equal(switched.body.account.actingAs, true);
+  assert.equal(switched.body.account.businessName, 'Corner Shop');
+  assert.equal((await call({ action: 'pull' }, switched.body.token)).status, 200);
+  const back = await call({ action: 'returnToAdmin' }, switched.body.token);
+  assert.equal(back.status, 200);
+  assert.equal(back.body.account.businessName, 'HQ');
+  assert.equal((await call({ action: 'pull' }, back.body.token)).status, 200);
+  assert.ok(db.tables.dc_audit_logs.some(x => x.action === 'company.switch'));
+  assert.ok(db.tables.dc_audit_logs.some(x => x.action === 'company.return'));
+});
+
+test('changing Super Admin credentials revokes an active company-scoped session', async () => {
+  await signup('boss@stockledger.ng', 'super-secret-1', 'HQ');
+  db.tables.dc_workspaces[0].role = 'superadmin';
+  const boss = await call({ action: 'login', username: 'boss@stockledger.ng', password: 'super-secret-1' });
+  const company = await signup('shop@stockledger.ng', 'company-pass-1', 'Corner Shop');
+  const switched = await call({ action: 'switchCompany', companyId: company.body.workspaceId }, boss.body.token);
+  assert.equal(switched.status, 200);
+  const changed = await call({ action: 'changeAuth', newUsername: 'boss2@stockledger.ng', newPassword: 'super-secret-2', currentPassword: 'super-secret-1' }, boss.body.token);
+  assert.equal(changed.status, 200);
+  assert.equal((await call({ action: 'pull' }, switched.body.token)).status, 401);
+});
+
+test('superadmin can suspend and reactivate a company subscription', async () => {
+  await signup('boss@stockledger.ng', 'super-secret-1', 'HQ');
+  db.tables.dc_workspaces[0].role = 'superadmin';
+  const boss = await call({ action: 'login', username: 'boss@stockledger.ng', password: 'super-secret-1' });
+  const company = await signup('shop@stockledger.ng', 'company-pass-1', 'Corner Shop');
+  const suspended = await call({ action: 'setCompanyPlan', companyId: company.body.workspaceId, plan: 'suspended' }, boss.body.token);
+  assert.equal(suspended.status, 200);
+  const owner = await call({ action: 'login', username: 'shop@stockledger.ng', password: 'company-pass-1' });
+  assert.equal(owner.body.account.canWrite, false);
+  const active = await call({ action: 'setCompanyPlan', companyId: company.body.workspaceId, plan: 'active' }, boss.body.token);
+  assert.equal(active.status, 200);
+  assert.ok(db.tables.dc_audit_logs.some(x => x.action === 'subscription.suspended'));
+  assert.ok(db.tables.dc_audit_logs.some(x => x.action === 'subscription.active'));
 });
 
 test('resetData wipes cloud data and forces stale devices to reload', async () => {

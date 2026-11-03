@@ -7,6 +7,7 @@ const scrypt = promisify(crypto.scrypt);
 const TABLE = 'delite_cravings_state';
 const WS = 'dc_workspaces';
 const MEM = 'dc_members';
+const AUDIT = 'dc_audit_logs';
 
 const PRICE_PER_USER = 1500; // NGN per user per month
 const SESSION_TTL_MS = 30 * 86400000;
@@ -103,6 +104,11 @@ async function sb(path, options = {}) {
   return data;
 }
 const enc = encodeURIComponent;
+async function writeAudit({ actorWorkspaceId, workspaceId, actor, action, details = {}, ip = '' }) {
+  try {
+    await sb(AUDIT, { method: 'POST', body: JSON.stringify({ actor_workspace_id: actorWorkspaceId, workspace_id: workspaceId, actor: text(actor, 100), action: text(action, 80), details, ip: text(ip, 64) }) });
+  } catch (e) { console.error('[audit]', e?.message || e); throw new Error('Audit log could not be written; operation was not completed.'); }
+}
 const isDuplicate = e => e?.code === '23505' || /duplicate key|unique constraint/i.test(String(e?.message || ''));
 
 /* ------------------------------------------------------------------ */
@@ -122,11 +128,14 @@ const cleanProduct = p => {
   if (!isObj(p) || !text(p.id, 64)) return null;
   const out = { id: text(p.id, 64), category: text(p.category, 40) || 'Other', name: text(p.name, 120), price: amount(p.price), opening: amount(p.opening) };
   if (p.sku) out.sku = text(p.sku, 32);
+  if (p.barcode) out.barcode = text(p.barcode, 64);
+  if (p.costPrice != null) out.costPrice = amount(p.costPrice);
   if (Array.isArray(p.priceLog)) out.priceLog = list(p.priceLog, l => isObj(l) ? { at: stamp(l.at), date: text(l.date, 10), from: amount(l.from), to: amount(l.to), src: text(l.src, 40) } : null, 200);
+  if (Array.isArray(p.costPriceLog)) out.costPriceLog = list(p.costPriceLog, l => isObj(l) ? { at: stamp(l.at), from: amount(l.from), to: amount(l.to), src: text(l.src, 40) } : null, 200);
   return out;
 };
 const cleanRow = r => isObj(r) && text(r.id, 64)
-  ? { id: text(r.id, 64), category: text(r.category, 40) || 'Other', name: text(r.name, 120), price: amount(r.price), opening: amount(r.opening), added: amount(r.added), closing: amount(r.closing) }
+  ? { id: text(r.id, 64), category: text(r.category, 40) || 'Other', name: text(r.name, 120), price: amount(r.price), opening: amount(r.opening), added: amount(r.added), closing: amount(r.closing), ...(r.costPrice != null ? { costPrice: amount(r.costPrice) } : {}) }
   : null;
 const cleanDay = (date, d) => {
   if (!isObj(d)) return null;
@@ -240,7 +249,8 @@ function access(ws, now = Date.now(), extra = {}) {
     businessName: ws.business_name, username: extra.username || ws.username || '', plan: ws.plan, canWrite, role, users,
     pricePerUser: PRICE_PER_USER, monthlyAmount: users * PRICE_PER_USER,
     endsAt: end ? new Date(end).toISOString() : null,
-    daysLeft: end ? Math.max(0, Math.ceil((end - now) / 86400000)) : null
+    daysLeft: end ? Math.max(0, Math.ceil((end - now) / 86400000)) : null,
+    actingAs: !!extra.actingAs, adminWorkspaceId: extra.adminWorkspaceId || null
   };
 }
 
@@ -278,11 +288,11 @@ const emptyState = () => ({ products: [], deletedProductIds: [], days: {}, delet
 async function usernameTaken(u) {
   return (await sb(WS + '?username=eq.' + enc(u) + '&select=id')).length > 0 || (await sb(MEM + '?username=eq.' + enc(u) + '&select=id')).length > 0;
 }
-async function accountFor(ws, role, username) {
+async function accountFor(ws, role, username, extra = {}) {
   const members = await sb(MEM + '?workspace_id=eq.' + enc(ws.id) + '&select=id');
-  return access(ws, Date.now(), { users: 1 + members.length, role, username });
+  return access(ws, Date.now(), { users: 1 + members.length, role, username, ...extra });
 }
-const issueToken = (ws, member, hash) => signToken({ w: ws.id, m: member?.id || null, f: fingerprint(hash), e: Date.now() + SESSION_TTL_MS });
+const issueToken = (ws, member, hash, adminWorkspaceId = null, adminHash = null) => signToken({ w: ws.id, m: member?.id || null, f: fingerprint(hash), e: Date.now() + SESSION_TTL_MS, ...(adminWorkspaceId ? { s: adminWorkspaceId, sf: fingerprint(adminHash) } : {}) });
 
 async function findPrincipal(username) {
   let ws = (await sb(WS + '?username=eq.' + enc(username) + '&select=*'))[0], member = null;
@@ -305,7 +315,15 @@ async function fromToken(token) {
   }
   const hash = (member || ws).pin_hash;
   if (fingerprint(hash) !== claims.f) return null; // password changed since the token was issued
-  return { ws, member, hash, role: member ? 'staff' : (ws.role || 'owner'), username: (member || ws).username };
+  let adminWorkspaceId = null;
+  if (claims.s) {
+    if (!UUID.test(claims.s)) return null;
+    const admin = (await sb(WS + '?id=eq.' + enc(claims.s) + '&select=id,role,username,pin_hash'))[0];
+    if (!admin || admin.role !== 'superadmin' || fingerprint(admin.pin_hash) !== claims.sf) return null;
+    adminWorkspaceId = admin.id;
+  }
+  const adminHash = adminWorkspaceId ? (await sb(WS + '?id=eq.' + enc(adminWorkspaceId) + '&select=pin_hash'))[0]?.pin_hash : null;
+  return { ws, member, hash, adminHash, role: adminWorkspaceId ? 'superadmin' : (member ? 'staff' : (ws.role || 'owner')), username: adminWorkspaceId ? (await sb(WS + '?id=eq.' + enc(adminWorkspaceId) + '&select=username'))[0]?.username : (member || ws).username, adminWorkspaceId };
 }
 
 /* ------------------------------------------------------------------ */
@@ -378,6 +396,32 @@ async function handler(req, res) {
     const isOwner = role === 'owner' || role === 'superadmin';
     const stateUrl = TABLE + '?id=eq.' + enc(ws.id);
 
+    if (action === 'switchCompany') {
+      if (role !== 'superadmin') return fail(res, 403, 'FORBIDDEN', 'Superadmin access is required.');
+      const companyId = String(body.companyId || '');
+      if (!UUID.test(companyId)) return fail(res, 400, 'BAD_REQUEST', 'Invalid company.');
+      const target = (await sb(WS + '?id=eq.' + enc(companyId) + '&select=*'))[0];
+      if (!target) return fail(res, 404, 'NOT_FOUND', 'Company not found.');
+      if (target.id === (a.adminWorkspaceId || ws.id)) return fail(res, 400, 'BAD_REQUEST', 'You are already in your Super Admin workspace.');
+      await writeAudit({ actorWorkspaceId: a.adminWorkspaceId || ws.id, workspaceId: target.id, actor: a.username, action: 'company.switch', details: { businessName: target.business_name }, ip });
+      const scopedToken = issueToken(target, null, target.pin_hash, a.adminWorkspaceId || ws.id, a.adminHash || a.hash);
+      return send(res, 200, { ok: true, workspaceId: target.id, token: scopedToken, account: await accountFor(target, 'superadmin', a.username, { actingAs: true, adminWorkspaceId: a.adminWorkspaceId || ws.id }) });
+    }
+
+    if (action === 'returnToAdmin') {
+      if (role !== 'superadmin' || !a.adminWorkspaceId) return fail(res, 403, 'FORBIDDEN', 'You are not operating inside another company.');
+      const admin = (await sb(WS + '?id=eq.' + enc(a.adminWorkspaceId) + '&role=eq.superadmin&select=*'))[0];
+      if (!admin) return fail(res, 401, 'AUTH_REQUIRED', 'Super Admin session is no longer valid.');
+      await writeAudit({ actorWorkspaceId: admin.id, workspaceId: ws.id, actor: a.username, action: 'company.return', details: {}, ip });
+      return send(res, 200, { ok: true, workspaceId: admin.id, token: issueToken(admin, null, admin.pin_hash), account: await accountFor(admin, 'superadmin', admin.username) });
+    }
+
+    if (action === 'listAudit') {
+      if (role !== 'superadmin') return fail(res, 403, 'FORBIDDEN', 'Superadmin access is required.');
+      const rows = await sb(AUDIT + '?select=id,workspace_id,actor,action,details,created_at&order=created_at.desc&limit=100');
+      return send(res, 200, { ok: true, entries: rows });
+    }
+
     if (action === 'listCompanies') {
       if (role !== 'superadmin') return fail(res, 403, 'FORBIDDEN', 'Superadmin access is required.');
       const companies = await sb(WS + '?select=id,username,business_name,plan,trial_ends_at,paid_until,role,created_at&order=created_at.desc');
@@ -386,7 +430,7 @@ async function handler(req, res) {
       return send(res, 200, { ok: true, companies: companies.map(c => ({ ...c, staffCount: counts[c.id] || 0 })) });
     }
 
-    if (action === 'createCompany' || action === 'extendCompany' || action === 'deleteCompany') {
+    if (action === 'createCompany' || action === 'extendCompany' || action === 'deleteCompany' || action === 'setCompanyPlan') {
       if (role !== 'superadmin') return fail(res, 403, 'FORBIDDEN', 'Superadmin access is required.');
       const companyId = String(body.companyId || '');
       if (action === 'createCompany') {
@@ -398,8 +442,9 @@ async function handler(req, res) {
         if (await usernameTaken(username)) return fail(res, 409, 'USERNAME_TAKEN', 'That login is already registered.');
         try {
           const pin_hash = await hashPin(password);
-          await sb(WS, { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ username, business_name: businessName, pin_hash }) });
-          return send(res, 200, { ok: true });
+          const made = await sb(WS, { method: 'POST', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ username, business_name: businessName, pin_hash }) });
+          await writeAudit({ actorWorkspaceId: a.adminWorkspaceId || ws.id, workspaceId: made[0].id, actor: a.username, action: 'company.create', details: { businessName, username }, ip });
+          return send(res, 200, { ok: true, companyId: made[0].id });
         } catch (e) {
           if (isDuplicate(e)) return fail(res, 409, 'USERNAME_TAKEN', 'That login is already registered.');
           throw e;
@@ -409,6 +454,15 @@ async function handler(req, res) {
       const target = (await sb(WS + '?id=eq.' + enc(companyId) + '&select=*'))[0];
       if (!target) return fail(res, 404, 'NOT_FOUND', 'Company not found.');
       if (companyId === ws.id) return fail(res, 400, 'BAD_REQUEST', 'You cannot delete or modify your own Super Admin company.');
+      if (action === 'setCompanyPlan') {
+        const plan = String(body.plan || '');
+        if (!['active', 'suspended'].includes(plan)) return fail(res, 400, 'BAD_REQUEST', 'Choose active or suspended.');
+        const currentPaid = Date.parse(target.paid_until || '') || 0;
+        const patch = plan === 'suspended' ? { plan: 'suspended' } : { plan: 'active', paid_until: currentPaid > Date.now() ? target.paid_until : new Date(Date.now() + 30 * 86400000).toISOString() };
+        await writeAudit({ actorWorkspaceId: a.adminWorkspaceId || ws.id, workspaceId: target.id, actor: a.username, action: 'subscription.' + plan, details: { previousPlan: target.plan, paid_until: target.paid_until || null }, ip });
+        await sb(WS + '?id=eq.' + enc(companyId), { method: 'PATCH', body: JSON.stringify(patch) });
+        return send(res, 200, { ok: true, plan });
+      }
       if (action === 'extendCompany') {
         const months = Number(body.months);
         if (!Number.isInteger(months) || months < 1 || months > 60) return fail(res, 400, 'BAD_REQUEST', 'Choose between 1 and 60 months.');
@@ -417,10 +471,12 @@ async function handler(req, res) {
         const end = new Date(base);
         end.setUTCMonth(end.getUTCMonth() + months);
         const paid_until = end.toISOString();
+        await writeAudit({ actorWorkspaceId: a.adminWorkspaceId || ws.id, workspaceId: target.id, actor: a.username, action: 'subscription.extend', details: { months, previousPlan: target.plan, previousPaidUntil: target.paid_until || null, paid_until }, ip });
         await sb(WS + '?id=eq.' + enc(companyId), { method: 'PATCH', body: JSON.stringify({ plan: 'active', paid_until }) });
         return send(res, 200, { ok: true, paid_until });
       }
       if (action === 'deleteCompany') {
+        await writeAudit({ actorWorkspaceId: a.adminWorkspaceId || ws.id, workspaceId: target.id, actor: a.username, action: 'company.delete', details: { businessName: target.business_name, username: target.username }, ip });
         await sb(WS + '?id=eq.' + enc(companyId), { method: 'DELETE' });
         return send(res, 200, { ok: true });
       }
@@ -466,6 +522,7 @@ async function handler(req, res) {
       if (!(await verifyPin(current, a.hash))) { noteFailure(a.username, ip); return fail(res, 401, 'LOGIN_INVALID', 'Current password is incorrect.'); }
       if (newUsername !== a.username && await usernameTaken(newUsername)) return fail(res, 409, 'USERNAME_TAKEN', 'That login is already taken.');
       const pin_hash = await hashPin(newPassword);
+      await writeAudit({ actorWorkspaceId: a.adminWorkspaceId || ws.id, workspaceId: ws.id, actor: a.username, action: 'auth.change', details: { usernameChanged: newUsername !== a.username }, ip });
       try {
         const target = a.member ? MEM + '?id=eq.' + enc(a.member.id) : WS + '?id=eq.' + enc(ws.id);
         await sb(target, { method: 'PATCH', body: JSON.stringify({ username: newUsername, pin_hash }) });
@@ -479,6 +536,7 @@ async function handler(req, res) {
     if (action === 'resetData') {
       if (!isOwner) return fail(res, 403, 'FORBIDDEN', 'Only an account owner can reset data.');
       if (!canWrite) return fail(res, 402, 'SUBSCRIPTION_ENDED', 'Your trial or subscription has ended.', { account: access(ws, Date.now(), { role }) });
+      await writeAudit({ actorWorkspaceId: a.adminWorkspaceId || ws.id, workspaceId: ws.id, actor: a.username, action: 'data.reset', details: {}, ip });
       const resetAt = new Date().toISOString();
       await sb(TABLE, { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates' }, body: JSON.stringify({ id: ws.id, data: { ...emptyState(), resetAt }, updated_at: resetAt }) });
       return send(res, 200, { ok: true, resetAt });

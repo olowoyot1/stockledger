@@ -54,3 +54,20 @@ create trigger dc_workspace_cleanup after delete on public.dc_workspaces for eac
 
 -- Make an account a superadmin (unlocks the Companies tab; never expires):
 -- update public.dc_workspaces set role='superadmin' where username='you@example.com';
+
+
+-- Super Admin audit history. Deliberately no FK to workspace_id so deletion events survive workspace deletion.
+create table if not exists public.dc_audit_logs (
+  id uuid primary key default gen_random_uuid(),
+  actor_workspace_id uuid,
+  workspace_id uuid,
+  actor text not null,
+  action text not null,
+  details jsonb not null default '{}'::jsonb,
+  ip text,
+  created_at timestamptz not null default now()
+);
+create index if not exists dc_audit_logs_created_at_idx on public.dc_audit_logs(created_at desc);
+create index if not exists dc_audit_logs_workspace_idx on public.dc_audit_logs(workspace_id, created_at desc);
+alter table public.dc_audit_logs enable row level security;
+revoke all on public.dc_audit_logs from anon, authenticated;

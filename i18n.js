@@ -558,6 +558,25 @@
     'err.NETWORK': 'We no fit reach the server. Check your network.'
   };
 
+  // Keep the barcode and product-category interface labels present in every locale.
+  const featureLabels = {
+    'products.ariaBarcode': 'Barcode for {name}',
+    'products.ariaScan': 'Scan barcode for {name}',
+    'scan.button': 'Scan',
+    'products.newCategory': 'New category',
+    'products.newCategoryRequired': 'Enter a category name.',
+    'products.barcodeTaken': 'Barcode {code} is already assigned to {name}.',
+    'scan.found': 'Found {name}.',
+    'scan.addNew': 'Add new product for barcode {code}?',
+    'scan.notFound': 'No product found for barcode {code}.',
+    'scan.located': 'Located {name}.',
+    'products.newCategoryName': 'New category name',
+    'products.barcode': 'Barcode'
+  };
+  for (const dict of [en, ig, yo, ha, pcm]) for (const [key, value] of Object.entries(featureLabels)) if (!(key in dict)) dict[key] = value;
+  if (!('err.NOT_FOUND' in en)) en['err.NOT_FOUND'] = 'The requested company or record was not found.';
+  for (const dict of [ig, yo, ha, pcm]) if (!('err.NOT_FOUND' in dict)) dict['err.NOT_FOUND'] = en['err.NOT_FOUND'];
+
   const DICT = { en, ig, yo, ha, pcm };
   const STORAGE_KEY = 'sl_lang'; // deliberately not matched by the dc_/delite_ purge: language survives logout
   let lang = 'en';

@@ -67,7 +67,7 @@
   ensureSkus();
 
   /* ---------------- stock maths ---------------- */
-  const calc = r => { const available = num(r.opening) + num(r.added), closing = Math.min(num(r.closing), available), sold = available - closing; return { available, closing, sold, sales: sold * num(r.price) }; };
+  const calc = r => { const available = num(r.opening) + num(r.added), closing = Math.min(num(r.closing), available), sold = available - closing, sales = sold * num(r.price); return { available, closing, sold, sales, grossProfit: r.costPrice == null ? null : sold * (num(r.price) - num(r.costPrice)) }; };
   const latestDay = () => Object.keys(days).filter(k => days[k]?.rows?.length).sort().pop() || '';
   const isCurrent = d => d >= today() || d >= latestDay();
   function openStock(p, d) {
@@ -84,8 +84,8 @@
     p.price = price; dirty.p = true; return true;
   }
   function totals(rs) {
-    const out = { sales: 0, units: 0, added: 0, closing: 0, p: {}, c: {} };
-    rs.forEach(r => { const z = calc(r); out.sales += z.sales; out.units += z.sold; out.added += num(r.added); out.closing += z.closing; out.p[r.name] = (out.p[r.name] || 0) + z.sales; out.c[r.category] = (out.c[r.category] || 0) + z.sales; });
+    const out = { sales: 0, units: 0, added: 0, closing: 0, grossProfit: 0, costTracked: 0, p: {}, c: {} };
+    rs.forEach(r => { const z = calc(r); out.sales += z.sales; out.units += z.sold; out.added += num(r.added); out.closing += z.closing; if (z.grossProfit != null) { out.grossProfit += z.grossProfit; out.costTracked++; } out.p[r.name] = (out.p[r.name] || 0) + z.sales; out.c[r.category] = (out.c[r.category] || 0) + z.sales; });
     return out;
   }
   function dateList(a, b) {
@@ -106,6 +106,7 @@
     $('userDisplay').textContent = name + (c.role === 'superadmin' ? ' · ' + t('acct.superadmin') : c.plan === 'trial' && c.canWrite ? ' · ' + t('acct.trialLeft', { n: c.daysLeft }) : c.canWrite === false ? ' · ' + t('acct.ended') : '');
     $('brandName').textContent = c.businessName || t('app.brand');
     $('companiesNavBtn').classList.toggle('hidden', c.role !== 'superadmin');
+    $('returnAdminBtn').classList.toggle('hidden', !c.actingAs);
     $('readOnlyBanner').classList.toggle('hidden', c.canWrite !== false);
     document.body.classList.toggle('is-readonly', c.canWrite === false);
     const isStaff = c.role === 'staff';
@@ -243,14 +244,14 @@
     const d = curDate(), saved = days[d]?.rows || [];
     rows = products.map(p => {
       const o = saved.find(x => x.id === p.id), opening = o ? num(o.opening) : openStock(p, d);
-      return { id: p.id, category: p.category, name: p.name, price: num(o?.price ?? p.price), opening, added: num(o?.added), closing: o ? num(o.closing) : opening };
+      return { id: p.id, category: p.category, name: p.name, price: num(o?.price ?? p.price), costPrice: o && Object.prototype.hasOwnProperty.call(o, 'costPrice') ? num(o.costPrice) : (o ? null : (p.costPrice == null ? null : num(p.costPrice))), opening, added: num(o?.added), closing: o ? num(o.closing) : opening };
     });
     const skuOf = new Map(products.map(p => [p.id, p.sku])), barcodeOf = new Map(products.map(p => [p.id, p.barcode]));
     const q = ($('salesSearch').value || '').toLowerCase();
     const visible = rows.filter(r => (r.name + ' ' + r.category + ' ' + (skuOf.get(r.id) || '') + ' ' + (barcodeOf.get(r.id) || '')).toLowerCase().includes(q));
     $('salesBody').innerHTML = visible.map(r => {
       const z = calc(r), nm = esc(r.name);
-      const cell = (f, v, label, extra = '') => '<td><input data-f="' + f + '" type="number" min="0" inputmode="numeric" value="' + v + '" ' + extra + ' aria-label="' + th(label) + ': ' + nm + '"></td>';
+      const cell = (f, v, label, extra = '') => '<td><input data-f="' + f + '" type="number" min="0" step="any" inputmode="decimal" value="' + v + '" ' + extra + ' aria-label="' + th(label) + ': ' + nm + '"></td>';
       return '<tr data-id="' + esc(r.id) + '"><td>' + esc(r.category) + '</td><td><b>' + nm + '</b><small class="muted"> ' + esc(skuOf.get(r.id) || '') + '</small></td>'
         + cell('opening', r.opening, 'col.opening') + cell('added', r.added, 'col.additions') + '<td class="av">' + z.available + '</td>'
         + cell('closing', z.closing, 'col.closing', 'max="' + z.available + '"')
@@ -349,9 +350,10 @@
       + '<td><div class="input-with-btn"><input data-f="barcode" maxlength="64" autocomplete="off" autocapitalize="none" spellcheck="false" value="' + esc(x.barcode || '') + '" aria-label="' + th('products.ariaBarcode', { name: x.name }) + '"' + (ro ? ' disabled' : '') + '>'
       + '<button class="btn btn-light scan-row" type="button" aria-label="' + th('products.ariaScan', { name: x.name }) + '"' + (ro ? ' disabled' : '') + '>' + th('scan.button') + '</button></div></td>'
       + '<td><input data-f="price" type="number" min="0" step="any" value="' + num(x.price) + '"' + (ro ? ' disabled' : '') + '></td>'
-      + '<td><input data-f="opening" type="number" min="0" value="' + num(x.opening) + '"' + (ro ? ' disabled' : '') + '></td>'
+      + '<td><input data-f="costPrice" type="number" min="0" step="any" value="' + (x.costPrice == null ? '' : num(x.costPrice)) + '" placeholder="—" aria-label="Cost price for ' + esc(x.name) + '"' + (ro ? ' disabled' : '') + '></td>'
+      + '<td><input data-f="opening" type="number" min="0" step="any" value="' + num(x.opening) + '"' + (ro ? ' disabled' : '') + '></td>'
       + '<td><button class="btn btn-danger rm" type="button"' + (ro ? ' disabled' : '') + '>' + th('common.remove') + '</button></td></tr>').join('')
-      || '<tr><td colspan="7" class="muted">' + th('products.empty') + '</td></tr>';
+      || '<tr><td colspan="8" class="muted">' + th('products.empty') + '</td></tr>';
     $('addProductBtn').disabled = ro;
   }
   const nameTaken = (name, exceptId) => products.some(p => p.id !== exceptId && String(p.name).trim().toLowerCase() === name.trim().toLowerCase());
@@ -395,7 +397,7 @@
     }
     const barcode = cleanCode($('pBarcode').value), owner = barcodeOwner(barcode);
     if (owner) { toast(t('products.barcodeTaken', { code: barcode, name: owner.name })); $('pBarcode').focus(); return; }
-    const p = { id: uid('P'), sku: '', category: normalize(category), name, price: num($('pPrice').value), opening: Math.floor(num($('pOpening').value)) };
+    const p = { id: uid('P'), sku: '', category: normalize(category), name, price: num($('pPrice').value), costPrice: $('pCostPrice').value.trim() === '' ? null : num($('pCostPrice').value), opening: num($('pOpening').value) };
     if (barcode) p.barcode = barcode;
     products.push(p);
     ensureSkus(); if (!write(KEYS.products, products)) { toast(t('toast.storageFull')); return; }
@@ -488,16 +490,17 @@
     const rs = []; list.forEach(d => (days[d]?.rows || []).forEach(r => rs.push(r)));
     const tt = totals(rs), saved = list.filter(d => days[d]).length, top = Object.entries(tt.p).sort((x, y) => y[1] - x[1]).slice(0, 8);
     const box = (k, v) => '<div class="summary-box"><span>' + th(k) + '</span><strong>' + v + '</strong></div>';
-    $('customReport').innerHTML = '<div class="report-summary">' + box('reports.totalSales', money(tt.sales)) + box('m.units', tt.units) + box('m.added', tt.added) + box('reports.savedDays', saved + '/' + list.length) + '</div>'
+    $('customReport').innerHTML = '<div class="report-summary">' + box('reports.totalSales', money(tt.sales)) + box('m.units', tt.units) + box('m.added', tt.added) + box('Gross Profit (cost-entered items)', tt.costTracked ? money(tt.grossProfit) : '—') + box('reports.savedDays', saved + '/' + list.length) + '</div>'
       + '<div class="two-col"><div class="panel"><h3>' + th('reports.topProducts') + '</h3>' + (top.map(x => '<div class="list-row"><span>' + esc(x[0]) + '</span><b>' + money(x[1]) + '</b></div>').join('') || '<p class="muted">' + th('reports.noData') + '</p>')
       + '</div><div class="panel"><h3>' + th('reports.categorySales') + '</h3>' + Object.entries(tt.c).sort((x, y) => y[1] - x[1]).map(x => '<div class="list-row"><span>' + esc(x[0]) + '</span><b>' + money(x[1]) + '</b></div>').join('') + '</div></div>';
   }
   function analytics() {
     const n = Number($('analyticsRange').value || 7), ds = [];
     for (let i = n - 1; i >= 0; i--) { const d = new Date(); d.setDate(d.getDate() - i); ds.push(ymd(d)); }
-    const v = ds.map(d => ({ d, t: totals(days[d]?.rows || []) })), total = v.reduce((s, x) => s + x.t.sales, 0), units = v.reduce((s, x) => s + x.t.units, 0);
+    const v = ds.map(d => ({ d, t: totals(days[d]?.rows || []) })), total = v.reduce((s, x) => s + x.t.sales, 0), units = v.reduce((s, x) => s + x.t.units, 0), profitRows = v.flatMap(x => days[x.d]?.rows || []).filter(r => r.costPrice != null), grossProfit = profitRows.reduce((s, r) => s + (calc(r).grossProfit || 0), 0);
     const best = [...v].sort((a, b) => b.t.sales - a.t.sales)[0], max = Math.max(1, ...v.map(x => x.t.sales)), active = v.filter(x => x.t.sales || x.t.units || x.t.added || x.t.closing).length;
     $('aSales').textContent = money(total); $('aAvg').textContent = money(active ? total / active : 0); $('aUnits').textContent = units;
+    if ($('aGrossProfit')) $('aGrossProfit').textContent = profitRows.length ? money(grossProfit) : '—';
     $('aBest').textContent = best?.t.sales ? fd(best.d) + ' ' + money(best.t.sales) : '—';
     $('chart').innerHTML = v.map(x => '<div class="bar-wrap" title="' + fd(x.d) + ' — ' + money(x.t.sales) + '"><div class="bar" data-h="' + Math.max(2, x.t.sales / max * 210) + '"></div><div class="bar-label">' + fd(x.d).slice(0, 5) + '</div></div>').join('');
     $('chart').querySelectorAll('.bar').forEach(b => { b.style.height = b.dataset.h + 'px'; }); // CSSOM, so no inline-style CSP exception is needed
@@ -513,10 +516,20 @@
     btn.disabled = true; msg.textContent = t('co.loading');
     try {
       const out = await api('listCompanies'), list = out.companies || [];
-      body.innerHTML = list.map(c => { const expiry = c.plan === 'active' ? c.paid_until : c.trial_ends_at; const expiryLabel = expiry ? fd(String(expiry).slice(0, 10)) : 'No expiry'; return '<tr><td><b>' + esc(c.business_name) + '</b></td><td>' + esc(c.username) + '</td><td>' + esc(c.plan) + '</td><td>' + Number(c.staffCount || 0) + '</td><td>' + esc(fd(String(c.created_at || '').slice(0, 10))) + '</td><td><div class="btn-group"><button class="btn btn-light co-extend" type="button" data-id="' + esc(c.id) + '" data-name="' + esc(c.business_name) + '">Extend</button><button class="btn btn-danger co-delete" type="button" data-id="' + esc(c.id) + '" data-name="' + esc(c.business_name) + '">Delete</button><small class="muted">Expires: ' + esc(expiryLabel) + '</small></div></td></tr>'; }).join('')
+      body.innerHTML = list.map(c => { const expiry = c.plan === 'active' ? c.paid_until : c.trial_ends_at; const expiryLabel = expiry ? fd(String(expiry).slice(0, 10)) : 'No expiry'; const suspended = c.plan === 'suspended'; return '<tr><td><b>' + esc(c.business_name) + '</b></td><td>' + esc(c.username) + '</td><td>' + esc(c.plan) + '</td><td>' + Number(c.staffCount || 0) + '</td><td>' + esc(fd(String(c.created_at || '').slice(0, 10))) + '</td><td><div class="btn-group"><button class="btn btn-light co-switch" type="button" data-id="' + esc(c.id) + '" data-name="' + esc(c.business_name) + '">Open</button><button class="btn btn-light co-extend" type="button" data-id="' + esc(c.id) + '" data-name="' + esc(c.business_name) + '">Extend</button><button class="btn btn-light co-plan" type="button" data-plan="' + (suspended ? 'active' : 'suspended') + '" data-id="' + esc(c.id) + '" data-name="' + esc(c.business_name) + '">' + (suspended ? 'Reactivate' : 'Suspend') + '</button><small class="muted">Expires: ' + esc(expiryLabel) + '</small><button class="btn btn-danger co-delete" type="button" data-id="' + esc(c.id) + '" data-name="' + esc(c.business_name) + '">Delete</button></div></td></tr>'; }).join('')
         || '<tr><td colspan="6" class="muted">' + th('co.none') + '</td></tr>';
       msg.textContent = list.length === 1 ? t('co.one') : t('co.many', { n: list.length });
+      await loadAudit();
     } catch (e) { body.innerHTML = ''; msg.textContent = SLAuth.errorText(e); } finally { btn.disabled = false; }
+  }
+
+  async function loadAudit() {
+    const body = $('auditBody'), msg = $('auditMessage');
+    try {
+      const out = await api('listAudit'), entries = out.entries || [];
+      body.innerHTML = entries.map(x => '<tr><td>' + esc(new Date(x.created_at).toLocaleString()) + '</td><td><code>' + esc(x.workspace_id || '') + '</code></td><td>' + esc(x.actor || '') + '</td><td>' + esc(x.action || '') + '</td><td>' + esc(JSON.stringify(x.details || {})) + '</td></tr>').join('') || '<tr><td colspan="5" class="muted">No audit events yet.</td></tr>';
+      msg.textContent = entries.length + ' recorded events.';
+    } catch (e) { body.innerHTML = ''; msg.textContent = SLAuth.errorText(e); }
   }
 
   async function createCompany(e) {
@@ -531,9 +544,22 @@
   }
 
   async function companyAction(e) {
-    const extend = e.target.closest('.co-extend'), remove = e.target.closest('.co-delete');
-    if (!extend && !remove) return;
-    const id = (extend || remove).dataset.id, name = (extend || remove).dataset.name;
+    const open = e.target.closest('.co-switch'), extend = e.target.closest('.co-extend'), remove = e.target.closest('.co-delete'), planBtn = e.target.closest('.co-plan');
+    if (!open && !extend && !remove && !planBtn) return;
+    const id = (open || extend || remove || planBtn).dataset.id, name = (open || extend || remove || planBtn).dataset.name;
+    if (open) {
+      if (!confirm('Open ' + name + ' in Super Admin mode? Changes will be recorded in the audit trail.')) return;
+      try { const out = await api('switchCompany', { companyId: id }); await switchWorkspace(out); }
+      catch (err) { toast(SLAuth.errorText(err)); }
+      return;
+    }
+    if (planBtn) {
+      const plan = planBtn.dataset.plan;
+      if (!confirm((plan === 'suspended' ? 'Suspend ' : 'Reactivate ') + name + '?')) return;
+      try { await api('setCompanyPlan', { companyId: id, plan }); toast(name + ' subscription updated.'); await loadCompanies(); }
+      catch (err) { toast(SLAuth.errorText(err)); }
+      return;
+    }
     if (extend) {
       const raw = prompt('How many months should ' + name + ' be extended? Enter 1–60.', '1');
       if (raw === null) return;
@@ -546,6 +572,18 @@
       try { await api('deleteCompany', { companyId: id }); toast(name + ' deleted.'); await loadCompanies(); }
       catch (err) { toast(SLAuth.errorText(err)); }
     }
+  }
+
+  async function switchWorkspace(out) {
+    flush();
+    const synced = await cloudPush();
+    if (!synced && (dirty.d || dirty.p)) throw new Error('Could not sync this workspace before switching. Please retry.');
+    if (cloud.busy) await cloud.promise;
+    SLAuth.purgeLocal();
+    localStorage.setItem('dc_ws', out.workspaceId);
+    localStorage.setItem(KEYS.account, JSON.stringify(out.account));
+    SLAuth.save({ token: out.token, username: out.account.username || SLAuth.username() });
+    location.reload();
   }
 
   function renderAll() { showAccount(); sales(); prod(); reports(); analytics(); }
@@ -687,7 +725,7 @@
       if (locked()) return;
       const i = e.target.closest('input[data-f]'), tr = i?.closest('tr'); if (!i || !tr) return;
       const r = rows.find(x => x.id === tr.dataset.id); if (!r) return;
-      const f = i.dataset.f, v = (f === 'price' || f === 'sold') ? num(i.value) : Math.floor(num(i.value));
+      const f = i.dataset.f, v = num(i.value);
       if (f === 'sold') { const av = calc(r).available; r.closing = av - Math.min(v, av); } else r[f] = v;
       refreshRow(tr, r, i); summary(); persistDay();
     });
@@ -741,6 +779,9 @@
         const d = curDate(), r = days[d]?.rows?.find(x => x.id === p.id);
         if (r && !locked() && isCurrent(d)) { r.price = v; dirty.d = true; }
         flush(); sales(); reports(); toast(t('products.priceUpdated')); return;
+      } else if (f === 'costPrice') {
+        const next = e.target.value.trim() === '' ? null : num(e.target.value);
+        if (p.costPrice !== next) { (p.costPriceLog || (p.costPriceLog = [])).push({ at: new Date().toISOString(), from: p.costPrice == null ? 0 : num(p.costPrice), to: next == null ? 0 : next, src: 'Products page' }); p.costPrice = next; }
       } else p[f] = f === 'category' ? e.target.value : num(e.target.value);
       dirty.p = true; flush(); sales(); reports(); analytics(); toast(t('products.updated'));
     });
@@ -772,6 +813,7 @@
     $('generateReportBtn').addEventListener('click', custom);
     $('analyticsRange').addEventListener('change', analytics);
     $('refreshCompaniesBtn').addEventListener('click', loadCompanies);
+    $('returnAdminBtn').addEventListener('click', async () => { try { const out = await api('returnToAdmin'); await switchWorkspace(out); } catch (e) { toast(SLAuth.errorText(e)); } });
     $('companyCreateForm').addEventListener('submit', createCompany);
     $('companiesBody').addEventListener('click', companyAction);
 

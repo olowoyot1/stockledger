@@ -57,6 +57,7 @@
     <div class="top-actions">
       <label class="lang-picker"><span class="sr-only" data-i18n="lang.label">Language</span><select data-lang-select aria-label="Language" data-i18n-aria="lang.label"></select></label>
       <span id="userDisplay" class="user-pill"></span>
+      <button id="returnAdminBtn" class="btn btn-light hidden" type="button">Return to Super Admin</button>
       <button id="logoutBtn" class="btn btn-light" type="button" data-i18n="common.logout">Logout</button>
     </div>
   </header>
@@ -118,7 +119,7 @@
         <div class="btn-group"><button id="productsScanBtn" class="btn btn-light" type="button" data-i18n="scan.button">Scan</button><button id="addProductBtn" class="btn btn-primary" type="button" data-i18n="products.add">+ Add Product</button></div>
       </div>
       <div class="panel table-panel"><div class="table-wrap"><table>
-        <thead><tr><th scope="col" data-i18n="col.category">Category</th><th scope="col" data-i18n="col.product">Product</th><th scope="col" data-i18n="col.sku">SKU</th><th scope="col" data-i18n="products.barcode">Barcode</th><th scope="col" data-i18n="col.unitPrice">Unit Price</th><th scope="col" data-i18n="col.openingStock">Opening Stock</th><th scope="col" data-i18n="col.actions">Actions</th></tr></thead>
+        <thead><tr><th scope="col" data-i18n="col.category">Category</th><th scope="col" data-i18n="col.product">Product</th><th scope="col" data-i18n="col.sku">SKU</th><th scope="col" data-i18n="products.barcode">Barcode</th><th scope="col" data-i18n="col.unitPrice">Unit Price</th><th scope="col">Cost Price</th><th scope="col" data-i18n="col.openingStock">Opening Stock</th><th scope="col" data-i18n="col.actions">Actions</th></tr></thead>
         <tbody id="productsBody"></tbody>
       </table></div></div>
     </section>
@@ -151,6 +152,7 @@
         <div class="metric"><span data-i18n="an.period">Period Sales</span><strong id="aSales">₦0</strong></div>
         <div class="metric"><span data-i18n="an.avg">Average Daily Sales</span><strong id="aAvg">₦0</strong></div>
         <div class="metric"><span data-i18n="m.units">Units Sold</span><strong id="aUnits">0</strong></div>
+        <div class="metric"><span>Gross Profit (where cost is entered)</span><strong id="aGrossProfit">—</strong></div>
         <div class="metric"><span data-i18n="an.best">Best Sales Day</span><strong id="aBest">—</strong></div>
       </div>
       <div class="panel"><div class="panel-head"><h3 data-i18n="an.trend">Daily Sales Trend</h3></div><div id="chart" class="chart"></div></div>
@@ -229,6 +231,11 @@
           <tbody id="companiesBody"></tbody>
         </table></div>
       </div>
+      <div class="panel table-panel">
+        <div class="panel-head"><h3>Super Admin audit trail</h3><span class="muted">Latest 100 events</span></div>
+        <div id="auditMessage" class="notice pad" role="status"></div>
+        <div class="table-wrap"><table><thead><tr><th>Date / time</th><th>Company ID</th><th>Actor</th><th>Action</th><th>Details</th></tr></thead><tbody id="auditBody"></tbody></table></div>
+      </div>
     </section>
   </main>
 
@@ -251,7 +258,8 @@
         <div class="input-with-btn"><input id="pBarcode" maxlength="64" autocomplete="off" autocapitalize="none" spellcheck="false"><button id="pScanBtn" class="btn btn-light" type="button" data-i18n="scan.button">Scan</button></div>
       </div>
       <label><span data-i18n="products.price">Unit price</span><input id="pPrice" type="number" min="0" step="any" value="0" inputmode="decimal"></label>
-      <label><span data-i18n="products.opening">Opening stock</span><input id="pOpening" type="number" min="0" step="1" value="0" inputmode="numeric"></label>
+      <label><span>Cost price per unit</span><input id="pCostPrice" type="number" min="0" step="any" value="" inputmode="decimal"></label>
+      <label><span data-i18n="products.opening">Opening stock</span><input id="pOpening" type="number" min="0" step="any" value="0" inputmode="decimal"></label>
       <div class="dialog-actions"><button id="productCancel" class="btn" type="button" data-i18n="common.cancel">Cancel</button><button class="btn btn-primary" type="submit" data-i18n="common.save">Save</button></div>
     </form>
   </dialog>
