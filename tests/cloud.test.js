@@ -289,6 +289,18 @@ test('superadmin can switch into a company, return to HQ, and all actions are au
   assert.ok(db.tables.dc_audit_logs.some(x => x.action === 'company.return'));
 });
 
+test('changing Super Admin credentials revokes an active company-scoped session', async () => {
+  await signup('boss@stockledger.ng', 'super-secret-1', 'HQ');
+  db.tables.dc_workspaces[0].role = 'superadmin';
+  const boss = await call({ action: 'login', username: 'boss@stockledger.ng', password: 'super-secret-1' });
+  const company = await signup('shop@stockledger.ng', 'company-pass-1', 'Corner Shop');
+  const switched = await call({ action: 'switchCompany', companyId: company.body.workspaceId }, boss.body.token);
+  assert.equal(switched.status, 200);
+  const changed = await call({ action: 'changeAuth', newUsername: 'boss2@stockledger.ng', newPassword: 'super-secret-2', currentPassword: 'super-secret-1' }, boss.body.token);
+  assert.equal(changed.status, 200);
+  assert.equal((await call({ action: 'pull' }, switched.body.token)).status, 401);
+});
+
 test('superadmin can suspend and reactivate a company subscription', async () => {
   await signup('boss@stockledger.ng', 'super-secret-1', 'HQ');
   db.tables.dc_workspaces[0].role = 'superadmin';
