@@ -67,7 +67,7 @@
   ensureSkus();
 
   /* ---------------- stock maths ---------------- */
-  const calc = r => { const available = num(r.opening) + num(r.added), closing = Math.min(num(r.closing), available), sold = available - closing; return { available, closing, sold, sales: sold * num(r.price) }; };
+  const calc = r => { const available = num(r.opening) + num(r.added), closing = Math.min(num(r.closing), available), sold = available - closing, sales = sold * num(r.price); return { available, closing, sold, sales, grossProfit: r.costPrice == null ? null : sold * (num(r.price) - num(r.costPrice)) }; };
   const latestDay = () => Object.keys(days).filter(k => days[k]?.rows?.length).sort().pop() || '';
   const isCurrent = d => d >= today() || d >= latestDay();
   function openStock(p, d) {
@@ -243,7 +243,7 @@
     const d = curDate(), saved = days[d]?.rows || [];
     rows = products.map(p => {
       const o = saved.find(x => x.id === p.id), opening = o ? num(o.opening) : openStock(p, d);
-      return { id: p.id, category: p.category, name: p.name, price: num(o?.price ?? p.price), opening, added: num(o?.added), closing: o ? num(o.closing) : opening };
+      return { id: p.id, category: p.category, name: p.name, price: num(o?.price ?? p.price), costPrice: o && Object.prototype.hasOwnProperty.call(o, 'costPrice') ? num(o.costPrice) : (o ? null : (p.costPrice == null ? null : num(p.costPrice))), opening, added: num(o?.added), closing: o ? num(o.closing) : opening };
     });
     const skuOf = new Map(products.map(p => [p.id, p.sku])), barcodeOf = new Map(products.map(p => [p.id, p.barcode]));
     const q = ($('salesSearch').value || '').toLowerCase();
@@ -349,7 +349,8 @@
       + '<td><div class="input-with-btn"><input data-f="barcode" maxlength="64" autocomplete="off" autocapitalize="none" spellcheck="false" value="' + esc(x.barcode || '') + '" aria-label="' + th('products.ariaBarcode', { name: x.name }) + '"' + (ro ? ' disabled' : '') + '>'
       + '<button class="btn btn-light scan-row" type="button" aria-label="' + th('products.ariaScan', { name: x.name }) + '"' + (ro ? ' disabled' : '') + '>' + th('scan.button') + '</button></div></td>'
       + '<td><input data-f="price" type="number" min="0" step="any" value="' + num(x.price) + '"' + (ro ? ' disabled' : '') + '></td>'
-      + '<td><input data-f="opening" type="number" min="0" value="' + num(x.opening) + '"' + (ro ? ' disabled' : '') + '></td>'
+      + '<td><input data-f="costPrice" type="number" min="0" step="any" value="' + (x.costPrice == null ? '' : num(x.costPrice)) + '" placeholder="—" aria-label="Cost price for ' + esc(x.name) + '"' + (ro ? ' disabled' : '') + '></td>'
+      + '<td><input data-f="opening" type="number" min="0" step="any" value="' + num(x.opening) + '"' + (ro ? ' disabled' : '') + '></td>'
       + '<td><button class="btn btn-danger rm" type="button"' + (ro ? ' disabled' : '') + '>' + th('common.remove') + '</button></td></tr>').join('')
       || '<tr><td colspan="7" class="muted">' + th('products.empty') + '</td></tr>';
     $('addProductBtn').disabled = ro;
@@ -395,7 +396,7 @@
     }
     const barcode = cleanCode($('pBarcode').value), owner = barcodeOwner(barcode);
     if (owner) { toast(t('products.barcodeTaken', { code: barcode, name: owner.name })); $('pBarcode').focus(); return; }
-    const p = { id: uid('P'), sku: '', category: normalize(category), name, price: num($('pPrice').value), opening: Math.floor(num($('pOpening').value)) };
+    const p = { id: uid('P'), sku: '', category: normalize(category), name, price: num($('pPrice').value), costPrice: $('pCostPrice').value.trim() === '' ? null : num($('pCostPrice').value), opening: num($('pOpening').value) };
     if (barcode) p.barcode = barcode;
     products.push(p);
     ensureSkus(); if (!write(KEYS.products, products)) { toast(t('toast.storageFull')); return; }
@@ -495,9 +496,10 @@
   function analytics() {
     const n = Number($('analyticsRange').value || 7), ds = [];
     for (let i = n - 1; i >= 0; i--) { const d = new Date(); d.setDate(d.getDate() - i); ds.push(ymd(d)); }
-    const v = ds.map(d => ({ d, t: totals(days[d]?.rows || []) })), total = v.reduce((s, x) => s + x.t.sales, 0), units = v.reduce((s, x) => s + x.t.units, 0);
+    const v = ds.map(d => ({ d, t: totals(days[d]?.rows || []) })), total = v.reduce((s, x) => s + x.t.sales, 0), units = v.reduce((s, x) => s + x.t.units, 0), profitRows = v.flatMap(x => days[x.d]?.rows || []).filter(r => r.costPrice != null), grossProfit = profitRows.reduce((s, r) => s + (calc(r).grossProfit || 0), 0);
     const best = [...v].sort((a, b) => b.t.sales - a.t.sales)[0], max = Math.max(1, ...v.map(x => x.t.sales)), active = v.filter(x => x.t.sales || x.t.units || x.t.added || x.t.closing).length;
     $('aSales').textContent = money(total); $('aAvg').textContent = money(active ? total / active : 0); $('aUnits').textContent = units;
+    if ($('aGrossProfit')) $('aGrossProfit').textContent = profitRows.length ? money(grossProfit) : '—';
     $('aBest').textContent = best?.t.sales ? fd(best.d) + ' ' + money(best.t.sales) : '—';
     $('chart').innerHTML = v.map(x => '<div class="bar-wrap" title="' + fd(x.d) + ' — ' + money(x.t.sales) + '"><div class="bar" data-h="' + Math.max(2, x.t.sales / max * 210) + '"></div><div class="bar-label">' + fd(x.d).slice(0, 5) + '</div></div>').join('');
     $('chart').querySelectorAll('.bar').forEach(b => { b.style.height = b.dataset.h + 'px'; }); // CSSOM, so no inline-style CSP exception is needed
@@ -687,7 +689,7 @@
       if (locked()) return;
       const i = e.target.closest('input[data-f]'), tr = i?.closest('tr'); if (!i || !tr) return;
       const r = rows.find(x => x.id === tr.dataset.id); if (!r) return;
-      const f = i.dataset.f, v = (f === 'price' || f === 'sold') ? num(i.value) : Math.floor(num(i.value));
+      const f = i.dataset.f, v = num(i.value);
       if (f === 'sold') { const av = calc(r).available; r.closing = av - Math.min(v, av); } else r[f] = v;
       refreshRow(tr, r, i); summary(); persistDay();
     });
@@ -719,8 +721,8 @@
 
     $('productsBody').addEventListener('input', e => {
       const tr = e.target.closest('tr[data-pid]'), p = tr && products.find(x => x.id === tr.dataset.pid), f = e.target.dataset.f;
-      if (!p || f !== 'opening' || !canEdit()) return;
-      p.opening = num(e.target.value); persistProducts();
+      if (!p || !['opening', 'costPrice'].includes(f) || !canEdit()) return;
+      p[f] = e.target.value.trim() === '' && f === 'costPrice' ? null : num(e.target.value); persistProducts();
     });
     $('productsBody').addEventListener('change', e => {
       const tr = e.target.closest('tr[data-pid]'), p = tr && products.find(x => String(x.id) === String(tr.dataset.pid)), f = e.target.dataset.f;
