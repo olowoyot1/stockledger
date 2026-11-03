@@ -84,8 +84,8 @@
     p.price = price; dirty.p = true; return true;
   }
   function totals(rs) {
-    const out = { sales: 0, units: 0, added: 0, closing: 0, p: {}, c: {} };
-    rs.forEach(r => { const z = calc(r); out.sales += z.sales; out.units += z.sold; out.added += num(r.added); out.closing += z.closing; out.p[r.name] = (out.p[r.name] || 0) + z.sales; out.c[r.category] = (out.c[r.category] || 0) + z.sales; });
+    const out = { sales: 0, units: 0, added: 0, closing: 0, grossProfit: 0, costTracked: 0, p: {}, c: {} };
+    rs.forEach(r => { const z = calc(r); out.sales += z.sales; out.units += z.sold; out.added += num(r.added); out.closing += z.closing; if (z.grossProfit != null) { out.grossProfit += z.grossProfit; out.costTracked++; } out.p[r.name] = (out.p[r.name] || 0) + z.sales; out.c[r.category] = (out.c[r.category] || 0) + z.sales; });
     return out;
   }
   function dateList(a, b) {
@@ -489,7 +489,7 @@
     const rs = []; list.forEach(d => (days[d]?.rows || []).forEach(r => rs.push(r)));
     const tt = totals(rs), saved = list.filter(d => days[d]).length, top = Object.entries(tt.p).sort((x, y) => y[1] - x[1]).slice(0, 8);
     const box = (k, v) => '<div class="summary-box"><span>' + th(k) + '</span><strong>' + v + '</strong></div>';
-    $('customReport').innerHTML = '<div class="report-summary">' + box('reports.totalSales', money(tt.sales)) + box('m.units', tt.units) + box('m.added', tt.added) + box('reports.savedDays', saved + '/' + list.length) + '</div>'
+    $('customReport').innerHTML = '<div class="report-summary">' + box('reports.totalSales', money(tt.sales)) + box('m.units', tt.units) + box('m.added', tt.added) + box('Gross Profit (cost-entered items)', tt.costTracked ? money(tt.grossProfit) : '—') + box('reports.savedDays', saved + '/' + list.length) + '</div>'
       + '<div class="two-col"><div class="panel"><h3>' + th('reports.topProducts') + '</h3>' + (top.map(x => '<div class="list-row"><span>' + esc(x[0]) + '</span><b>' + money(x[1]) + '</b></div>').join('') || '<p class="muted">' + th('reports.noData') + '</p>')
       + '</div><div class="panel"><h3>' + th('reports.categorySales') + '</h3>' + Object.entries(tt.c).sort((x, y) => y[1] - x[1]).map(x => '<div class="list-row"><span>' + esc(x[0]) + '</span><b>' + money(x[1]) + '</b></div>').join('') + '</div></div>';
   }
@@ -721,8 +721,8 @@
 
     $('productsBody').addEventListener('input', e => {
       const tr = e.target.closest('tr[data-pid]'), p = tr && products.find(x => x.id === tr.dataset.pid), f = e.target.dataset.f;
-      if (!p || !['opening', 'costPrice'].includes(f) || !canEdit()) return;
-      p[f] = e.target.value.trim() === '' && f === 'costPrice' ? null : num(e.target.value); persistProducts();
+      if (!p || f !== 'opening' || !canEdit()) return;
+      p.opening = num(e.target.value); persistProducts();
     });
     $('productsBody').addEventListener('change', e => {
       const tr = e.target.closest('tr[data-pid]'), p = tr && products.find(x => String(x.id) === String(tr.dataset.pid)), f = e.target.dataset.f;
