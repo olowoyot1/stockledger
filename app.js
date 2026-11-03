@@ -106,6 +106,7 @@
     $('userDisplay').textContent = name + (c.role === 'superadmin' ? ' · ' + t('acct.superadmin') : c.plan === 'trial' && c.canWrite ? ' · ' + t('acct.trialLeft', { n: c.daysLeft }) : c.canWrite === false ? ' · ' + t('acct.ended') : '');
     $('brandName').textContent = c.businessName || t('app.brand');
     $('companiesNavBtn').classList.toggle('hidden', c.role !== 'superadmin');
+    $('returnAdminBtn').classList.toggle('hidden', !c.actingAs);
     $('readOnlyBanner').classList.toggle('hidden', c.canWrite !== false);
     document.body.classList.toggle('is-readonly', c.canWrite === false);
     const isStaff = c.role === 'staff';
@@ -515,10 +516,20 @@
     btn.disabled = true; msg.textContent = t('co.loading');
     try {
       const out = await api('listCompanies'), list = out.companies || [];
-      body.innerHTML = list.map(c => { const expiry = c.plan === 'active' ? c.paid_until : c.trial_ends_at; const expiryLabel = expiry ? fd(String(expiry).slice(0, 10)) : 'No expiry'; return '<tr><td><b>' + esc(c.business_name) + '</b></td><td>' + esc(c.username) + '</td><td>' + esc(c.plan) + '</td><td>' + Number(c.staffCount || 0) + '</td><td>' + esc(fd(String(c.created_at || '').slice(0, 10))) + '</td><td><div class="btn-group"><button class="btn btn-light co-extend" type="button" data-id="' + esc(c.id) + '" data-name="' + esc(c.business_name) + '">Extend</button><button class="btn btn-danger co-delete" type="button" data-id="' + esc(c.id) + '" data-name="' + esc(c.business_name) + '">Delete</button><small class="muted">Expires: ' + esc(expiryLabel) + '</small></div></td></tr>'; }).join('')
+      body.innerHTML = list.map(c => { const expiry = c.plan === 'active' ? c.paid_until : c.trial_ends_at; const expiryLabel = expiry ? fd(String(expiry).slice(0, 10)) : 'No expiry'; const suspended = c.plan === 'suspended'; return '<tr><td><b>' + esc(c.business_name) + '</b></td><td>' + esc(c.username) + '</td><td>' + esc(c.plan) + '</td><td>' + Number(c.staffCount || 0) + '</td><td>' + esc(fd(String(c.created_at || '').slice(0, 10))) + '</td><td><div class="btn-group"><button class="btn btn-light co-switch" type="button" data-id="' + esc(c.id) + '" data-name="' + esc(c.business_name) + '">Open</button><button class="btn btn-light co-extend" type="button" data-id="' + esc(c.id) + '" data-name="' + esc(c.business_name) + '">Extend</button><button class="btn btn-light co-plan" type="button" data-plan="' + (suspended ? 'active' : 'suspended') + '" data-id="' + esc(c.id) + '" data-name="' + esc(c.business_name) + '">' + (suspended ? 'Reactivate' : 'Suspend') + '</button><small class="muted">Expires: ' + esc(expiryLabel) + '</small><button class="btn btn-danger co-delete" type="button" data-id="' + esc(c.id) + '" data-name="' + esc(c.business_name) + '">Delete</button></div></td></tr>'; }).join('')
         || '<tr><td colspan="6" class="muted">' + th('co.none') + '</td></tr>';
       msg.textContent = list.length === 1 ? t('co.one') : t('co.many', { n: list.length });
+      await loadAudit();
     } catch (e) { body.innerHTML = ''; msg.textContent = SLAuth.errorText(e); } finally { btn.disabled = false; }
+  }
+
+  async function loadAudit() {
+    const body = $('auditBody'), msg = $('auditMessage');
+    try {
+      const out = await api('listAudit'), entries = out.entries || [];
+      body.innerHTML = entries.map(x => '<tr><td>' + esc(new Date(x.created_at).toLocaleString()) + '</td><td><code>' + esc(x.workspace_id || '') + '</code></td><td>' + esc(x.actor || '') + '</td><td>' + esc(x.action || '') + '</td><td>' + esc(JSON.stringify(x.details || {})) + '</td></tr>').join('') || '<tr><td colspan="5" class="muted">No audit events yet.</td></tr>';
+      msg.textContent = entries.length + ' recorded events.';
+    } catch (e) { body.innerHTML = ''; msg.textContent = SLAuth.errorText(e); }
   }
 
   async function createCompany(e) {
@@ -533,9 +544,22 @@
   }
 
   async function companyAction(e) {
-    const extend = e.target.closest('.co-extend'), remove = e.target.closest('.co-delete');
-    if (!extend && !remove) return;
-    const id = (extend || remove).dataset.id, name = (extend || remove).dataset.name;
+    const open = e.target.closest('.co-switch'), extend = e.target.closest('.co-extend'), remove = e.target.closest('.co-delete'), planBtn = e.target.closest('.co-plan');
+    if (!open && !extend && !remove && !planBtn) return;
+    const id = (open || extend || remove || planBtn).dataset.id, name = (open || extend || remove || planBtn).dataset.name;
+    if (open) {
+      if (!confirm('Open ' + name + ' in Super Admin mode? Changes will be recorded in the audit trail.')) return;
+      try { const out = await api('switchCompany', { companyId: id }); await switchWorkspace(out); }
+      catch (err) { toast(SLAuth.errorText(err)); }
+      return;
+    }
+    if (planBtn) {
+      const plan = planBtn.dataset.plan;
+      if (!confirm((plan === 'suspended' ? 'Suspend ' : 'Reactivate ') + name + '?')) return;
+      try { await api('setCompanyPlan', { companyId: id, plan }); toast(name + ' subscription updated.'); await loadCompanies(); }
+      catch (err) { toast(SLAuth.errorText(err)); }
+      return;
+    }
     if (extend) {
       const raw = prompt('How many months should ' + name + ' be extended? Enter 1–60.', '1');
       if (raw === null) return;
@@ -548,6 +572,16 @@
       try { await api('deleteCompany', { companyId: id }); toast(name + ' deleted.'); await loadCompanies(); }
       catch (err) { toast(SLAuth.errorText(err)); }
     }
+  }
+
+  async function switchWorkspace(out) {
+    flush();
+    if (cloud.busy) await cloud.promise;
+    SLAuth.purgeLocal();
+    localStorage.setItem('dc_ws', out.workspaceId);
+    localStorage.setItem(KEYS.account, JSON.stringify(out.account));
+    SLAuth.save({ token: out.token, username: out.account.username || SLAuth.username() });
+    location.reload();
   }
 
   function renderAll() { showAccount(); sales(); prod(); reports(); analytics(); }
@@ -777,6 +811,7 @@
     $('generateReportBtn').addEventListener('click', custom);
     $('analyticsRange').addEventListener('change', analytics);
     $('refreshCompaniesBtn').addEventListener('click', loadCompanies);
+    $('returnAdminBtn').addEventListener('click', async () => { try { const out = await api('returnToAdmin'); await switchWorkspace(out); } catch (e) { toast(SLAuth.errorText(e)); } });
     $('companyCreateForm').addEventListener('submit', createCompany);
     $('companiesBody').addEventListener('click', companyAction);
 
