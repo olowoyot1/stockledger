@@ -250,7 +250,7 @@
     const visible = rows.filter(r => (r.name + ' ' + r.category + ' ' + (skuOf.get(r.id) || '') + ' ' + (barcodeOf.get(r.id) || '')).toLowerCase().includes(q));
     $('salesBody').innerHTML = visible.map(r => {
       const z = calc(r), nm = esc(r.name);
-      const cell = (f, v, label, extra = '') => '<td><input data-f="' + f + '" type="number" min="0" inputmode="numeric" value="' + v + '" ' + extra + ' aria-label="' + th(label) + ': ' + nm + '"></td>';
+      const cell = (f, v, label, extra = '') => '<td><input data-f="' + f + '" type="number" min="0" step="any" inputmode="decimal" value="' + v + '" ' + extra + ' aria-label="' + th(label) + ': ' + nm + '"></td>';
       return '<tr data-id="' + esc(r.id) + '"><td>' + esc(r.category) + '</td><td><b>' + nm + '</b><small class="muted"> ' + esc(skuOf.get(r.id) || '') + '</small></td>'
         + cell('opening', r.opening, 'col.opening') + cell('added', r.added, 'col.additions') + '<td class="av">' + z.available + '</td>'
         + cell('closing', z.closing, 'col.closing', 'max="' + z.available + '"')
@@ -352,7 +352,7 @@
       + '<td><input data-f="costPrice" type="number" min="0" step="any" value="' + (x.costPrice == null ? '' : num(x.costPrice)) + '" placeholder="—" aria-label="Cost price for ' + esc(x.name) + '"' + (ro ? ' disabled' : '') + '></td>'
       + '<td><input data-f="opening" type="number" min="0" step="any" value="' + num(x.opening) + '"' + (ro ? ' disabled' : '') + '></td>'
       + '<td><button class="btn btn-danger rm" type="button"' + (ro ? ' disabled' : '') + '>' + th('common.remove') + '</button></td></tr>').join('')
-      || '<tr><td colspan="7" class="muted">' + th('products.empty') + '</td></tr>';
+      || '<tr><td colspan="8" class="muted">' + th('products.empty') + '</td></tr>';
     $('addProductBtn').disabled = ro;
   }
   const nameTaken = (name, exceptId) => products.some(p => p.id !== exceptId && String(p.name).trim().toLowerCase() === name.trim().toLowerCase());
@@ -743,6 +743,9 @@
         const d = curDate(), r = days[d]?.rows?.find(x => x.id === p.id);
         if (r && !locked() && isCurrent(d)) { r.price = v; dirty.d = true; }
         flush(); sales(); reports(); toast(t('products.priceUpdated')); return;
+      } else if (f === 'costPrice') {
+        const next = e.target.value.trim() === '' ? null : num(e.target.value);
+        if (p.costPrice !== next) { (p.costPriceLog || (p.costPriceLog = [])).push({ at: new Date().toISOString(), from: p.costPrice == null ? 0 : num(p.costPrice), to: next == null ? 0 : next, src: 'Products page' }); p.costPrice = next; }
       } else p[f] = f === 'category' ? e.target.value : num(e.target.value);
       dirty.p = true; flush(); sales(); reports(); analytics(); toast(t('products.updated'));
     });
