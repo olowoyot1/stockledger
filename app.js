@@ -576,6 +576,8 @@
 
   async function switchWorkspace(out) {
     flush();
+    const synced = await cloudPush();
+    if (!synced && (dirty.d || dirty.p)) throw new Error('Could not sync this workspace before switching. Please retry.');
     if (cloud.busy) await cloud.promise;
     SLAuth.purgeLocal();
     localStorage.setItem('dc_ws', out.workspaceId);
