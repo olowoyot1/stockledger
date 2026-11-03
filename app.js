@@ -513,10 +513,39 @@
     btn.disabled = true; msg.textContent = t('co.loading');
     try {
       const out = await api('listCompanies'), list = out.companies || [];
-      body.innerHTML = list.map(c => '<tr><td><b>' + esc(c.business_name) + '</b><small class="muted"> ' + th('plan.' + (['trial', 'active', 'suspended'].includes(c.plan) ? c.plan : 'suspended')) + '</small></td><td>' + esc(c.username) + '</td><td>' + esc(c.plan) + '</td><td>' + Number(c.staffCount || 0) + '</td><td>' + esc(fd(String(c.created_at || '').slice(0, 10))) + '</td></tr>').join('')
-        || '<tr><td colspan="5" class="muted">' + th('co.none') + '</td></tr>';
+      body.innerHTML = list.map(c => '<tr><td><b>' + esc(c.business_name) + '</b></td><td>' + esc(c.username) + '</td><td>' + esc(c.plan) + '<small class="muted"> ' + esc(fd(String(c.paid_until || c.trial_ends_at || '').slice(0, 10))) + '</small></td><td>' + Number(c.staffCount || 0) + '</td><td>' + esc(fd(String(c.created_at || '').slice(0, 10))) + '</td><td><div class="btn-group"><button class="btn btn-light co-extend" type="button" data-id="' + esc(c.id) + '" data-name="' + esc(c.business_name) + '">Extend</button><button class="btn btn-danger co-delete" type="button" data-id="' + esc(c.id) + '" data-name="' + esc(c.business_name) + '">Delete</button></div></td></tr>').join('')
+        || '<tr><td colspan="6" class="muted">' + th('co.none') + '</td></tr>';
       msg.textContent = list.length === 1 ? t('co.one') : t('co.many', { n: list.length });
     } catch (e) { body.innerHTML = ''; msg.textContent = SLAuth.errorText(e); } finally { btn.disabled = false; }
+  }
+
+  async function createCompany(e) {
+    e.preventDefault();
+    const form = $('companyCreateForm'), msg = $('companyCreateMessage'), btn = $('createCompanyBtn');
+    const businessName = $('coBusinessName').value.trim(), username = $('coUsername').value.trim(), password = $('coPassword').value;
+    btn.disabled = true; msg.textContent = 'Creating company…';
+    try {
+      await api('createCompany', { businessName, username, password });
+      form.reset(); msg.textContent = 'Company account created successfully.'; toast('Company created.'); await loadCompanies();
+    } catch (err) { msg.textContent = SLAuth.errorText(err); } finally { btn.disabled = false; }
+  }
+
+  async function companyAction(e) {
+    const extend = e.target.closest('.co-extend'), remove = e.target.closest('.co-delete');
+    if (!extend && !remove) return;
+    const id = (extend || remove).dataset.id, name = (extend || remove).dataset.name;
+    if (extend) {
+      const raw = prompt('How many months should ' + name + ' be extended? Enter 1–60.', '1');
+      if (raw === null) return;
+      const months = Number(raw);
+      if (!Number.isInteger(months) || months < 1 || months > 60) { toast('Enter a whole number from 1 to 60.'); return; }
+      try { await api('extendCompany', { companyId: id, months }); toast('Subscription extended for ' + name + '.'); await loadCompanies(); }
+      catch (err) { toast(SLAuth.errorText(err)); }
+    } else {
+      if (!confirm('Permanently delete ' + name + '? This removes its workspace, staff accounts and cloud records. This cannot be undone.')) return;
+      try { await api('deleteCompany', { companyId: id }); toast(name + ' deleted.'); await loadCompanies(); }
+      catch (err) { toast(SLAuth.errorText(err)); }
+    }
   }
 
   function renderAll() { showAccount(); sales(); prod(); reports(); analytics(); }
@@ -743,6 +772,8 @@
     $('generateReportBtn').addEventListener('click', custom);
     $('analyticsRange').addEventListener('change', analytics);
     $('refreshCompaniesBtn').addEventListener('click', loadCompanies);
+    $('companyCreateForm').addEventListener('submit', createCompany);
+    $('companiesBody').addEventListener('click', companyAction);
 
     const header = ['Date', 'Category', 'Product', 'Opening', 'Additions', 'Available', 'Closing', 'Sold', 'Unit Price', 'Sales']; // exports stay in English so they open the same everywhere
     const line = (d, r) => { const z = calc(r); return [fd(d), r.category, r.name, r.opening, r.added, z.available, z.closing, z.sold, r.price, z.sales]; };
