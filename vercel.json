@@ -1,6 +1,8 @@
 {
-  "framework": "nextjs",
-  "outputDirectory": ".next",
+  "framework": null,
+  "buildCommand": null,
+  "installCommand": null,
+  "outputDirectory": ".",
   "headers": [
     {
       "source": "/(.*)",
