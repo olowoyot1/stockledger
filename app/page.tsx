@@ -1,12 +1,16 @@
 "use client"
 
 import { BarChart3, Boxes, ChevronRight, CircleHelp, CreditCard, LayoutDashboard, Package, Search, Settings, ShoppingBag, Truck, Users, Wallet } from "lucide-react"
+import type { LucideIcon } from "lucide-react"
 import { useState } from "react"
 
-const nav = [
+type NavItem = [label: string, icon: LucideIcon]
+type Product = [name: string, meta: string, count: string, icon: LucideIcon]
+
+const nav: NavItem[] = [
   ["Overview", LayoutDashboard], ["Inventory", Boxes], ["Orders", ShoppingBag], ["Suppliers", Truck], ["Customers", Users],
 ]
-const products = [["Premium Headphones", "Electronics · SKU 1048", "248", CreditCard], ["Canvas Backpack", "Accessories · SKU 2081", "186", Package], ["Ceramic Tumbler", "Home & Living · SKU 3340", "124", Wallet], ["Cotton Overshirt", "Apparel · SKU 4092", "96", ShoppingBag]]
+const products: Product[] = [["Premium Headphones", "Electronics · SKU 1048", "248", CreditCard], ["Canvas Backpack", "Accessories · SKU 2081", "186", Package], ["Ceramic Tumbler", "Home & Living · SKU 3340", "124", Wallet], ["Cotton Overshirt", "Apparel · SKU 4092", "96", ShoppingBag]]
 const bars = [42, 67, 52, 78, 62, 92, 73, 81, 64, 88, 72, 97]
 
 export default function Home() {
