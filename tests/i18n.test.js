@@ -31,7 +31,7 @@ test('Nigerian languages are present', () => {
 
 test('every key used in the code or markup exists', () => {
   const used = new Set();
-  for (const f of ['app.js', 'auth.js', 'team.js', 'debtors.js']) {
+  for (const f of ['app.js', 'auth.js', 'team.js', 'debtors.js', 'scanner.js']) {
     for (const m of src(f).matchAll(/\b(?:t|th)\('([\w.]+)'/g)) used.add(m[1]);
     for (const m of src(f).matchAll(/\bth\('([\w.]+)'/g)) used.add(m[1]);
   }
@@ -46,7 +46,7 @@ test('every key used in the code or markup exists', () => {
 
 test('no unused translation keys (keeps dictionaries lean)', () => {
   const engine = src('i18n.js').split('const DICT = ')[1]; // code after the dictionaries
-  const all = ['app.js', 'auth.js', 'team.js', 'debtors.js', 'index.html'].map(src).join('\n') + engine;
+  const all = ['app.js', 'auth.js', 'team.js', 'debtors.js', 'scanner.js', 'index.html'].map(src).join('\n') + engine;
   const dynamic = /^(err\.|plan\.|src\.)/;
   const unused = Object.keys(DICT.en).filter(k => !dynamic.test(k) && !all.includes("'" + k + "'") && !all.includes('"' + k + '"') && !all.includes('"' + k + '|'));
   assert.deepEqual(unused, []);

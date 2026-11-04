@@ -278,3 +278,29 @@ test('oversized payloads are rejected', async () => {
   const r = await call({ action: 'push', products: [{ id: 'x', name: 'y'.repeat(3_600_000) }] }, token);
   assert.equal(r.status, 413);
 });
+
+test('superadmin company actions are written to the audit log; failures to log never block them', async () => {
+  const owner = (await signup()).body;
+  await signup('boss@stockledger.ng', 'super-secret-1', 'HQ');
+  db.tables.dc_workspaces[1].role = 'superadmin';
+  const boss = (await call({ action: 'login', username: 'boss@stockledger.ng', password: 'super-secret-1' })).body;
+  const targetId = db.tables.dc_workspaces[0].id;
+
+  assert.equal((await call({ action: 'createCompany', businessName: 'New Co', username: 'newco@shop.ng', password: 'long-password-1' }, boss.token)).status, 200);
+  assert.equal((await call({ action: 'extendCompany', companyId: targetId, months: 2 }, boss.token)).status, 200);
+  assert.equal((await call({ action: 'deleteCompany', companyId: targetId }, boss.token)).status, 200);
+  assert.deepEqual(db.tables.dc_audit_logs.map(r => r.action), ['company.create', 'company.extend', 'company.delete']);
+  assert.equal(db.tables.dc_audit_logs[2].workspace_id, targetId);
+  assert.equal(db.tables.dc_audit_logs[0].actor, 'boss@stockledger.ng');
+
+  // owners cannot do these and leave no entry
+  const before = db.tables.dc_audit_logs.length;
+  assert.equal((await call({ action: 'deleteCompany', companyId: targetId }, owner.token)).status, 401); // owner's workspace is gone, token no longer valid
+  assert.equal(db.tables.dc_audit_logs.length, before);
+
+  // audit failure must not break the action
+  db.setHook((m, table) => (table === 'dc_audit_logs' ? { ok: false, status: 500, text: async () => '{}' } : null));
+  const ok = await call({ action: 'createCompany', businessName: 'Second Co', username: 'second@shop.ng', password: 'long-password-1' }, boss.token);
+  db.setHook(null);
+  assert.equal(ok.status, 200);
+});

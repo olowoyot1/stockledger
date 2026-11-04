@@ -23,7 +23,6 @@
   const fd = d => isYmd(d) ? d.slice(8, 10) + '/' + d.slice(5, 7) + '/' + d.slice(0, 4) : String(d || '');
   const money = x => '₦' + Number(x || 0).toLocaleString('en-NG', { maximumFractionDigits: 2 });
   const uid = p => p + '-' + (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2, 10));
-  const prevDay = d => { const x = new Date(d + 'T12:00:00'); x.setDate(x.getDate() - 1); return ymd(x); };
   const dayTime = d => Date.parse(d?.updatedAt || d?.savedAt || '') || 0;
   const normalize = x => {
     x = String(x || '').trim().toLowerCase();

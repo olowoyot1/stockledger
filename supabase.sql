@@ -54,3 +54,36 @@ create trigger dc_workspace_cleanup after delete on public.dc_workspaces for eac
 
 -- Make an account a superadmin (unlocks the Companies tab; never expires):
 -- update public.dc_workspaces set role='superadmin' where username='you@example.com';
+
+-- ---------------------------------------------------------------------------
+-- Super Admin audit log (append-only). Written by the API for company create / extend / delete.
+-- No foreign keys on purpose: entries must survive deletion of the workspace they describe.
+-- ---------------------------------------------------------------------------
+create table if not exists public.dc_audit_logs (
+  id uuid primary key default gen_random_uuid(),
+  actor_workspace_id uuid,
+  workspace_id uuid,
+  actor text not null,
+  action text not null,
+  details jsonb not null default '{}'::jsonb,
+  ip text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists dc_audit_logs_created_at_idx on public.dc_audit_logs(created_at desc);
+create index if not exists dc_audit_logs_workspace_idx on public.dc_audit_logs(workspace_id, created_at desc);
+create index if not exists dc_audit_logs_actor_ws_idx on public.dc_audit_logs(actor_workspace_id, created_at desc);
+create index if not exists dc_audit_logs_action_idx on public.dc_audit_logs(action, created_at desc);
+
+alter table public.dc_audit_logs enable row level security;
+revoke all on public.dc_audit_logs from anon, authenticated;
+
+-- Append-only: block UPDATE / DELETE / TRUNCATE for every role, including the service role.
+create or replace function public.dc_audit_logs_immutable() returns trigger language plpgsql as $$
+begin raise exception 'dc_audit_logs is append-only'; end $$;
+drop trigger if exists dc_audit_logs_no_mutate on public.dc_audit_logs;
+create trigger dc_audit_logs_no_mutate before update or delete on public.dc_audit_logs
+  for each row execute function public.dc_audit_logs_immutable();
+drop trigger if exists dc_audit_logs_no_truncate on public.dc_audit_logs;
+create trigger dc_audit_logs_no_truncate before truncate on public.dc_audit_logs
+  for each statement execute function public.dc_audit_logs_immutable();

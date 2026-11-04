@@ -7,6 +7,7 @@ const scrypt = promisify(crypto.scrypt);
 const TABLE = 'delite_cravings_state';
 const WS = 'dc_workspaces';
 const MEM = 'dc_members';
+const AUDIT = 'dc_audit_logs';
 
 const PRICE_PER_USER = 1500; // NGN per user per month
 const SESSION_TTL_MS = 30 * 86400000;
@@ -82,6 +83,15 @@ function readToken(token, now = Date.now()) {
 /* ------------------------------------------------------------------ */
 /* Supabase REST                                                        */
 /* ------------------------------------------------------------------ */
+// Best-effort audit trail for super-admin actions. Never blocks or fails the request itself.
+async function audit(actorWs, actor, action, targetWorkspaceId, details, ip) {
+  try {
+    await sb(AUDIT, { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({
+      actor_workspace_id: actorWs, workspace_id: targetWorkspaceId || null, actor, action, details: details || {}, ip: ip ? String(ip).slice(0, 64) : null
+    }) });
+  } catch (e) { console.error('audit log failed:', e && e.message); }
+}
+
 async function sb(path, options = {}) {
   const base = String(process.env.SUPABASE_URL || '').replace(/\/$/, '');
   // Supabase may expose the newer secret-key name; keep the legacy name as fallback.
@@ -399,6 +409,7 @@ async function handler(req, res) {
         try {
           const pin_hash = await hashPin(password);
           await sb(WS, { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ username, business_name: businessName, pin_hash }) });
+          await audit(ws.id, a.username, 'company.create', null, { username, businessName }, ip);
           return send(res, 200, { ok: true });
         } catch (e) {
           if (isDuplicate(e)) return fail(res, 409, 'USERNAME_TAKEN', 'That login is already registered.');
@@ -418,10 +429,12 @@ async function handler(req, res) {
         end.setUTCMonth(end.getUTCMonth() + months);
         const paid_until = end.toISOString();
         await sb(WS + '?id=eq.' + enc(companyId), { method: 'PATCH', body: JSON.stringify({ plan: 'active', paid_until }) });
+        await audit(ws.id, a.username, 'company.extend', companyId, { months, paid_until, username: target.username }, ip);
         return send(res, 200, { ok: true, paid_until });
       }
       if (action === 'deleteCompany') {
         await sb(WS + '?id=eq.' + enc(companyId), { method: 'DELETE' });
+        await audit(ws.id, a.username, 'company.delete', companyId, { username: target.username, businessName: target.business_name }, ip);
         return send(res, 200, { ok: true });
       }
     }

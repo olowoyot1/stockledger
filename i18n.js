@@ -11,6 +11,7 @@
   const en = {
     'app.title': 'StockLedger — Sales & Stock', 'app.subtitle': 'Sales & Stock Control', 'app.brand': 'My Business',
     'lang.label': 'Language', 'skip': 'Skip to content',
+    'scan.button': 'Scan', 'scan.title': 'Scan barcode', 'scan.manual': 'Or type the code', 'scan.use': 'Use code', 'scan.starting': 'Starting camera…', 'scan.help': 'Point the camera at the barcode.', 'scan.noCamera': 'Camera not available. Type the code instead.', 'scan.denied': 'Camera permission was denied. Type the code instead.', 'scan.found': '{name} found.', 'scan.addNew': 'No product has code {code}. Add it as a new product?', 'scan.notFound': 'No product has code {code}.', 'scan.located': '{name} located in the list.', 'products.barcode': 'Barcode', 'products.ariaBarcode': 'Barcode for {name}', 'products.ariaScan': 'Scan barcode for {name}', 'products.newCategory': '+ New category…', 'products.newCategoryName': 'New category name', 'products.newCategoryRequired': 'Enter a name for the new category.', 'products.barcodeTaken': 'Barcode {code} already belongs to {name}.', 'err.NOT_FOUND': 'We could not find that.',
     'common.logout': 'Logout', 'common.cancel': 'Cancel', 'common.save': 'Save', 'common.remove': 'Remove', 'common.edit': 'Edit', 'common.wait': 'Please wait…',
     'nav.aria': 'Main', 'nav.sales': 'Daily Sales', 'nav.products': 'Products', 'nav.reports': 'Reports', 'nav.analytics': 'Analytics',
     'nav.credit': 'Credit & Debtors', 'nav.import': 'Excel Import', 'nav.settings': 'Settings', 'nav.companies': 'Companies',
@@ -121,6 +122,7 @@
   const ig = {
     'app.title': 'StockLedger — Ire Ahịa na Ngwongwo', 'app.subtitle': 'Njikwa Ire Ahịa na Ngwongwo', 'app.brand': 'Azụmahịa m',
     'lang.label': 'Asụsụ', 'skip': 'Gafee gaa n’ọdịnaya',
+    'scan.button': 'Sikeni', 'scan.title': 'Sikeni barcode', 'scan.manual': 'Ma ọ bụ tinye koodu ahụ', 'scan.use': 'Jiri koodu', 'scan.starting': 'Na-emepe kamera…', 'scan.help': 'Chee kamera ahụ na barcode ahụ.', 'scan.noCamera': 'Kamera adịghị. Tinye koodu ahụ aka.', 'scan.denied': 'A jụrụ ikike kamera. Tinye koodu ahụ aka.', 'scan.found': 'Achọtara {name}.', 'scan.addNew': 'Ngwaahịa nwere koodu {code} adịghị. Gbakwunye ya dị ka ngwaahịa ọhụrụ?', 'scan.notFound': 'Ọ nweghị ngwaahịa nwere koodu {code}.', 'scan.located': 'Achọtara {name} n’ndepụta ahụ.', 'products.barcode': 'Barcode', 'products.ariaBarcode': 'Barcode maka {name}', 'products.ariaScan': 'Sikeni barcode maka {name}', 'products.newCategory': '+ Otu ọhụrụ…', 'products.newCategoryName': 'Aha otu ọhụrụ', 'products.newCategoryRequired': 'Tinye aha maka otu ọhụrụ ahụ.', 'products.barcodeTaken': 'Barcode {code} bụ nke {name} ugbu a.', 'err.NOT_FOUND': 'Achọtaghị ya.',
     'common.logout': 'Pụọ', 'common.cancel': 'Kagbuo', 'common.save': 'Chekwaa', 'common.remove': 'Wepụ', 'common.edit': 'Dezie', 'common.wait': 'Biko chere…',
     'nav.aria': 'Isi', 'nav.sales': 'Ire Ahịa Kwa Ụbọchị', 'nav.products': 'Ngwaahịa', 'nav.reports': 'Akụkọ', 'nav.analytics': 'Nyocha',
     'nav.credit': 'Ụgwọ na Ndị Ji Ụgwọ', 'nav.import': 'Ibubata Excel', 'nav.settings': 'Ntọala', 'nav.companies': 'Ụlọ Ọrụ',
@@ -231,6 +233,7 @@
   const yo = {
     'app.title': 'StockLedger — Títà àti Ọjà', 'app.subtitle': 'Ìtọ́jú Títà àti Ọjà', 'app.brand': 'Iṣẹ́ Òwò Mi',
     'lang.label': 'Èdè', 'skip': 'Lọ sí àkóónú',
+    'scan.button': 'Ṣàyẹ̀wò', 'scan.title': 'Ṣàyẹ̀wò barcode', 'scan.manual': 'Tàbí tẹ kóòdù náà', 'scan.use': 'Lo kóòdù', 'scan.starting': 'Ń ṣí kámẹ́rà…', 'scan.help': 'Tọ́ka kámẹ́rà sí barcode náà.', 'scan.noCamera': 'Kámẹ́rà kò sí. Tẹ kóòdù náà dípò.', 'scan.denied': 'A kọ̀ ìyọ̀nda kámẹ́rà. Tẹ kóòdù náà dípò.', 'scan.found': 'A rí {name}.', 'scan.addNew': 'Kò sí ọjà tó ní kóòdù {code}. Ṣé kí a fi kún un gẹ́gẹ́ bí ọjà tuntun?', 'scan.notFound': 'Kò sí ọjà tó ní kóòdù {code}.', 'scan.located': 'A rí {name} nínú àtòjọ náà.', 'products.barcode': 'Barcode', 'products.ariaBarcode': 'Barcode fún {name}', 'products.ariaScan': 'Ṣàyẹ̀wò barcode fún {name}', 'products.newCategory': '+ Ẹ̀ka tuntun…', 'products.newCategoryName': 'Orúkọ ẹ̀ka tuntun', 'products.newCategoryRequired': 'Tẹ orúkọ fún ẹ̀ka tuntun náà.', 'products.barcodeTaken': 'Barcode {code} ti jẹ́ ti {name} tẹ́lẹ̀.', 'err.NOT_FOUND': 'A kò rí i.',
     'common.logout': 'Jáde', 'common.cancel': 'Fagilé', 'common.save': 'Fi pamọ́', 'common.remove': 'Yọ kúrò', 'common.edit': 'Ṣàtúnṣe', 'common.wait': 'Jọ̀wọ́ dúró…',
     'nav.aria': 'Pàtàkì', 'nav.sales': 'Títà Ojoojúmọ́', 'nav.products': 'Àwọn Ọjà', 'nav.reports': 'Ìròyìn', 'nav.analytics': 'Ìtúpalẹ̀',
     'nav.credit': 'Gbèsè àti Onígbèsè', 'nav.import': 'Gbé Excel Wọlé', 'nav.settings': 'Ètò', 'nav.companies': 'Àwọn Ilé-iṣẹ́',
@@ -341,6 +344,7 @@
   const ha = {
     'app.title': 'StockLedger — Tallace-tallace da Kaya', 'app.subtitle': 'Kula da Tallace-tallace da Kaya', 'app.brand': 'Kasuwancina',
     'lang.label': 'Harshe', 'skip': 'Tsallaka zuwa abun ciki',
+    'scan.button': 'Duba', 'scan.title': 'Duba barcode', 'scan.manual': 'Ko kuma rubuta lambar', 'scan.use': 'Yi amfani da lambar', 'scan.starting': 'Ana buɗe kyamara…', 'scan.help': 'Nuna kyamara ga barcode ɗin.', 'scan.noCamera': 'Babu kyamara. Rubuta lambar maimakon haka.', 'scan.denied': 'An hana izinin kyamara. Rubuta lambar maimakon haka.', 'scan.found': 'An samo {name}.', 'scan.addNew': 'Babu kayan da ke da lambar {code}. Ƙara shi a matsayin sabon kaya?', 'scan.notFound': 'Babu kayan da ke da lambar {code}.', 'scan.located': 'An samo {name} a cikin jerin.', 'products.barcode': 'Barcode', 'products.ariaBarcode': 'Barcode na {name}', 'products.ariaScan': 'Duba barcode na {name}', 'products.newCategory': '+ Sabon rukuni…', 'products.newCategoryName': 'Sunan sabon rukuni', 'products.newCategoryRequired': 'Rubuta sunan sabon rukunin.', 'products.barcodeTaken': 'Barcode {code} na {name} ne tuni.', 'err.NOT_FOUND': 'Ba a same shi ba.',
     'common.logout': 'Fita', 'common.cancel': 'Soke', 'common.save': 'Ajiye', 'common.remove': 'Cire', 'common.edit': 'Gyara', 'common.wait': 'Don Allah a jira…',
     'nav.aria': 'Babba', 'nav.sales': 'Tallace-tallacen Yau da Kullum', 'nav.products': 'Kayayyaki', 'nav.reports': 'Rahotanni', 'nav.analytics': 'Nazari',
     'nav.credit': 'Bashi da Masu Bashi', 'nav.import': 'Shigo da Excel', 'nav.settings': 'Saituna', 'nav.companies': 'Kamfanoni',
@@ -451,6 +455,7 @@
   const pcm = {
     'app.title': 'StockLedger — Sales & Stock', 'app.subtitle': 'How to Control Your Sales & Stock', 'app.brand': 'My Business',
     'lang.label': 'Language', 'skip': 'Skip go main page',
+    'scan.button': 'Scan', 'scan.title': 'Scan barcode', 'scan.manual': 'Or type the code', 'scan.use': 'Use code', 'scan.starting': 'Dey open camera…', 'scan.help': 'Point camera for the barcode.', 'scan.noCamera': 'Camera no dey work. Type the code instead.', 'scan.denied': 'You no allow camera. Type the code instead.', 'scan.found': 'We see {name}.', 'scan.addNew': 'No product get code {code}. You wan add am as new product?', 'scan.notFound': 'No product get code {code}.', 'scan.located': 'We see {name} for the list.', 'products.barcode': 'Barcode', 'products.ariaBarcode': 'Barcode for {name}', 'products.ariaScan': 'Scan barcode for {name}', 'products.newCategory': '+ New category…', 'products.newCategoryName': 'Name of new category', 'products.newCategoryRequired': 'Put name for the new category.', 'products.barcodeTaken': 'Barcode {code} don already belong to {name}.', 'err.NOT_FOUND': 'We no see am.',
     'common.logout': 'Log out', 'common.cancel': 'Cancel', 'common.save': 'Save', 'common.remove': 'Remove', 'common.edit': 'Edit', 'common.wait': 'Abeg wait small…',
     'nav.aria': 'Main', 'nav.sales': 'Daily Sales', 'nav.products': 'Products', 'nav.reports': 'Reports', 'nav.analytics': 'How Business Dey Go',
     'nav.credit': 'Credit & People Wey Dey Owe', 'nav.import': 'Bring Excel In', 'nav.settings': 'Settings', 'nav.companies': 'Companies',

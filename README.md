@@ -10,6 +10,7 @@ Sales, stock, credit-sales and debtor tracking. Each business signs up, gets an 
 - **Plans:** `trial` → writes allowed for 14 days; `active` → allowed until `paid_until`; expired/`suspended` → read-only (the app shows a banner and disables editing; the API answers 402). Data stays viewable and exportable.
 - **Roles:** `owner` (manages staff, can reset data), `staff` (record sales, change own password), `superadmin` (Companies tab, never expires).
 - **Sync:** merges are per-record and server-side. Deleted days/products are tombstoned so they cannot be resurrected by a stale device; concurrent saves are detected with optimistic locking and re-merged; "Reset App Data" is a real cloud-wide reset that other devices pick up.
+- **Audit log:** super-admin actions (create, extend, delete company) are written to the append-only `dc_audit_logs` table. Logging is best-effort and never blocks the action.
 - **Shared devices:** logging out, or signing in as a different business, clears local data.
 
 ## Pricing
@@ -44,6 +45,7 @@ All text lives in `i18n.js`. Static markup uses `data-i18n="key"`; scripts use `
 - Strict Content-Security-Policy (no inline scripts/styles); the Excel reader is self-hosted in `vendor/` and loaded only when an `.xlsx` is imported.
 - **SheetJS 0.18.5** (the last version published to npm) has known advisories for maliciously crafted files. Uploads are limited to 5 MB / 5,000 rows and parsed only in the importing user's own browser; for stricter handling, import CSV, or replace `vendor/xlsx.full.min.js` with a current build from cdn.sheetjs.com.
 - Server input is whitelisted and size-limited, because a staff login can push data that the owner's browser later renders.
+- The barcode scanner needs camera access, so `vercel.json` sets `Permissions-Policy: camera=(self)`.
 - Credit records are append-only (like a paper ledger): correct a mistake with a new entry.
 
 ## Not built yet
