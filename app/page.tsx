@@ -2,6 +2,7 @@
 
 import { BarChart3, Boxes, ChevronRight, CircleHelp, CreditCard, LayoutDashboard, Package, Search, Settings, ShoppingBag, Truck, Users, Wallet } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
+import Image from "next/image"
 import { useState } from "react"
 
 type NavItem = [label: string, icon: LucideIcon]
@@ -17,7 +18,7 @@ export default function Home() {
   const [active, setActive] = useState("Overview")
   return <div className="shell">
     <aside className="sidebar">
-      <div className="brand"><div className="brand-mark">S</div><span>stockledger</span></div>
+      <div className="brand"><div className="brand-mark"><Image src="/stockledger-logo.png" alt="Stockledger logo" width={34} height={34} priority /></div><span>stockledger</span></div>
       <nav className="nav" aria-label="Main navigation">
         <div className="nav-label">Workspace</div>
         {nav.map(([label, Icon]) => <button key={label} className={active === label ? "active" : ""} onClick={() => setActive(label)}><Icon size={17}/><span>{label}</span></button>)}
