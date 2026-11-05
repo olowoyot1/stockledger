@@ -55,3 +55,30 @@ h1 { margin:0; color:var(--deep); font-family:'Space Grotesk'; font-size:32px; l
 .product-count { color:var(--deep); font-size:12px; font-weight:700; }
 @media (max-width: 900px) { .sidebar { width:78px; padding:22px 10px; } .brand { padding:0 12px 32px; } .brand span, .nav button span, .nav-label, .support { display:none; } .nav button { justify-content:center; } .main { padding:24px; } .stats { grid-template-columns:repeat(2,1fr); } }
 @media (max-width: 640px) { .main { padding:20px 15px; } .topbar { align-items:flex-start; } h1 { font-size:26px; } .search { display:none; } .hero { padding:24px; } .hero-stat { display:none; } .grid { grid-template-columns:1fr; } .stats { gap:10px; } .card { padding:16px; } }
+.page-heading { display:flex; justify-content:space-between; align-items:flex-end; gap:20px; margin-bottom:22px; }
+.page-heading h2 { margin:0 0 5px; color:var(--deep); font-family:'Space Grotesk'; font-size:28px; }
+.page-heading p:not(.eyebrow), .card-title p { margin:0; color:var(--muted); font-size:13px; }
+.primary-button, .small-button { border:0; color:#fff; background:var(--purple); border-radius:999px; font-size:12px; font-weight:700; cursor:pointer; }
+.primary-button { padding:12px 20px; }
+.primary-button:hover, .small-button:hover { background:var(--deep); }
+.sales-summary { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:18px; }
+.sales-summary .card { display:flex; flex-direction:column; gap:10px; }
+.sales-summary span { color:var(--muted); font-size:12px; }
+.sales-summary strong { color:var(--deep); font-family:'Space Grotesk'; font-size:24px; }
+.sales-table { overflow:hidden; }
+.sales-table .card-title { align-items:flex-start; }
+.saved { color:var(--green); font-size:11px; font-weight:700; }
+.unsaved { color:var(--orange); font-size:11px; font-weight:700; }
+.table-scroll { overflow-x:auto; }
+table { width:100%; min-width:850px; border-collapse:collapse; }
+th, td { padding:12px 10px; border-bottom:1px solid var(--line); text-align:left; color:var(--muted); font-size:12px; white-space:nowrap; }
+th { color:var(--muted); font-size:10px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; }
+td strong { display:block; color:var(--deep); font-size:12px; }
+td small { display:block; margin-top:3px; color:var(--muted); font-size:10px; }
+td input { width:76px; padding:8px 9px; border:1px solid var(--line); border-radius:8px; color:var(--deep); background:#fff; font:inherit; }
+td input:focus { outline:2px solid #d8f4e4; border-color:var(--green); }
+.sold-cell { color:var(--purple); font-weight:700; }
+.small-button { padding:8px 12px; font-size:10px; }
+.live-note { display:flex; align-items:center; gap:7px; margin-top:22px; color:#8a978f; font-size:11px; }
+@media (max-width: 900px) { .sales-summary { grid-template-columns:repeat(2,1fr); } }
+@media (max-width: 640px) { .page-heading { align-items:stretch; flex-direction:column; } .sales-summary { gap:10px; } .sales-summary strong { font-size:20px; } }
