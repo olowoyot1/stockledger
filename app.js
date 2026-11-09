@@ -536,7 +536,7 @@
     for (let i = n - 1; i >= 0; i--) { const d = new Date(); d.setDate(d.getDate() - i); ds.push(ymd(d)); }
     const v = ds.map(d => ({ d, t: totals(days[d]?.rows || []) })), total = v.reduce((s, x) => s + x.t.sales, 0), units = v.reduce((s, x) => s + x.t.units, 0);
     const active = v.filter(x => x.t.sales || x.t.units || x.t.added || x.t.closing).length;
-    const periodRows = ds.flatMap(d => days[d]?.rows || []); $('aSales').textContent = salesMoney(periodRows); $('aAvg').textContent = salesMoney(periodRows.map(r => ({ ...r, salesTotal: calc(r).sales / Math.max(1, active) }))); $('aUnits').textContent = units;
+    const periodRows = ds.flatMap(d => days[d]?.rows || []); $('aSales').textContent = salesMoney(periodRows); $('aAvg').textContent = salesMoney(periodRows.map(r => ({ ...r, salesTotal: calc(r).sales / Math.max(1, active), transactions: [], price: 0 }))); $('aUnits').textContent = units;
     const currencies = new Set(periodRows.map(r => r.currency || 'NGN')); $('aBest').textContent = currencies.size === 1 ? (v.filter(x => x.t.sales).sort((a, b) => b.t.sales - a.t.sales)[0]?.d || '—') : 'See currency totals';
     const currencyTotals = {}; periodRows.forEach(r => { const c = r.currency || 'NGN'; currencyTotals[c] = (currencyTotals[c] || 0) + calc(r).sales; }); $('chart').innerHTML = '<div class="list-row"><span>Sales by currency</span><b>' + Object.entries(currencyTotals).map(([c, n]) => money(n, c)).join(' · ') + '</b></div>';
     const p = {}, c = {};
@@ -822,12 +822,12 @@
     $('companyCreateForm').addEventListener('submit', createCompany);
     $('companiesBody').addEventListener('click', companyAction);
 
-    const header = ['Date', 'Category', 'Product', 'Opening', 'Additions', 'Available', 'Closing', 'Sold', 'Unit Price', 'Sales']; // exports stay in English so they open the same everywhere
-    const line = (d, r) => { const z = calc(r); return [fd(d), r.category, r.name, r.opening, r.added, z.available, z.closing, z.sold, r.price, z.sales]; };
+    const header = ['Date', 'Category', 'Product', 'Base Unit', 'Currency', 'Opening', 'Additions', 'Available', 'Closing', 'Sold', 'Unit Price', 'Sales', 'Sale Details']; // exports stay in English so they open the same everywhere
+    const line = (d, r) => { const z = calc(r); return [fd(d), r.category, r.name, r.baseUnit || 'Piece', r.currency || 'NGN', r.opening, r.added, z.available, z.closing, z.sold, r.price, z.sales, (r.transactions || []).map(tx => tx.qty + ' ' + tx.unit + ' @ ' + tx.unitPrice + ' ' + (tx.currency || r.currency || 'NGN')).join('; ')]; };
     $('exportHistoryBtn').addEventListener('click', () => {
       const p = products.find(x => x.id === $('historyProduct').value); if (!p) return;
-      const out = [['Date', 'Product', 'Opening', 'Additions', 'Available', 'Closing', 'Sold', 'Unit Price', 'Sales']];
-      historyRows(p.id).forEach(x => out.push([fd(x.d), p.name, x.r.opening, x.r.added, x.z.available, x.z.closing, x.z.sold, x.r.price, x.z.sales]));
+      const out = [['Date', 'Product', 'Base Unit', 'Currency', 'Opening', 'Additions', 'Available', 'Closing', 'Sold', 'Unit Price', 'Sales', 'Sale Details']];
+      historyRows(p.id).forEach(x => out.push([fd(x.d), p.name, x.r.baseUnit || p.baseUnit || 'Piece', x.r.currency || p.currency || 'NGN', x.r.opening, x.r.added, x.z.available, x.z.closing, x.z.sold, x.r.price, x.z.sales, (x.r.transactions || []).map(tx => tx.qty + ' ' + tx.unit + ' @ ' + tx.unitPrice + ' ' + (tx.currency || 'NGN')).join('; ')]));
       download('stockledger-history-' + p.name.replace(/[^a-z0-9]+/gi, '-').toLowerCase() + '.csv', csv(out));
     });
     $('exportCustomBtn').addEventListener('click', () => { const out = [header]; dateList($('reportFrom').value, $('reportTo').value).forEach(d => (days[d]?.rows || []).forEach(r => out.push(line(d, r)))); download('stockledger-report.csv', csv(out)); });
