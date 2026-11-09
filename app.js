@@ -354,8 +354,8 @@
       + '<td><div class="input-with-btn"><input data-f="barcode" maxlength="64" autocomplete="off" autocapitalize="none" spellcheck="false" value="' + esc(x.barcode || '') + '" aria-label="' + th('products.ariaBarcode', { name: x.name }) + '"' + (ro ? ' disabled' : '') + '>'
       + '<button class="btn btn-light scan-row" type="button" aria-label="' + th('products.ariaScan', { name: x.name }) + '"' + (ro ? ' disabled' : '') + '>' + th('scan.button') + '</button></div></td>'
       + '<td><input data-f="price" type="number" min="0" step="any" value="' + num(x.price) + '"' + (ro ? ' disabled' : '') + '></td>'
-      + '<td><input data-f="opening" type="number" min="0" value="' + num(x.opening) + '"' + (ro ? ' disabled' : '') + '></td>'
-      + '<td><button class="btn btn-danger rm" type="button"' + (ro ? ' disabled' : '') + '>' + th('common.remove') + '</button></td></tr>').join('')
+      + '<td><input data-f="opening" type="number" min="0" step="any" value="' + num(x.opening) + '"' + (ro ? ' disabled' : '') + '></td>'
+      + '<td><small class="muted">' + esc(x.baseUnit || 'Piece') + ' · ' + esc(x.currency || 'NGN') + '</small><button class="btn units-btn" type="button"' + (ro ? ' disabled' : '') + '>Units / Currency</button><button class="btn btn-danger rm" type="button"' + (ro ? ' disabled' : '') + '>' + th('common.remove') + '</button></td></tr>').join('')
       || '<tr><td colspan="7" class="muted">' + th('products.empty') + '</td></tr>';
     $('addProductBtn').disabled = ro;
   }
@@ -418,6 +418,27 @@
     products.push(p);
     ensureSkus(); if (!write(KEYS.products, products)) { toast(t('toast.storageFull')); return; }
     $('productDialog').close(); prod(); sales(); toast(t('products.added'));
+  }
+
+  function editProductUnits(p) {
+    if (!guard() || !p) return;
+    const base = prompt('Base stock unit for ' + p.name + ' (e.g. kg, litre, bag):', p.baseUnit || 'Piece');
+    if (base === null || !base.trim()) return;
+    const current = productUnits(p).map(u => u.name + '=' + u.factor).join('\n');
+    const raw = prompt('Enter each selling unit on a new line as Unit=quantity in ' + base + '. Blank lines are ignored. Example: Half bag=0.5', current);
+    if (raw === null) return;
+    const units = raw.split(/\r?\n/).map(line => {
+      const at = line.lastIndexOf('='), name = at < 0 ? '' : line.slice(0, at).trim(), factor = at < 0 ? NaN : Number(line.slice(at + 1).trim());
+      return name && Number.isFinite(factor) && factor > 0 && factor <= 1e9 ? { name: name.slice(0, 40), factor } : null;
+    }).filter(Boolean);
+    if (!units.some(u => u.name.toLowerCase() === base.trim().toLowerCase() && u.factor === 1)) units.unshift({ name: base.trim().slice(0, 40), factor: 1 });
+    if (units.length > 40) { toast('Maximum 40 selling units per product.'); return; }
+    const currency = prompt('Currency code for this product (NGN, USD, GBP, EUR, GHS, XAF, KES, ZAR):', p.currency || 'NGN');
+    if (currency === null) return;
+    const code = currency.trim().toUpperCase();
+    if (!/^[A-Z]{3}$/.test(code)) { toast('Enter a valid three-letter currency code.'); return; }
+    p.baseUnit = base.trim().slice(0, 40); p.units = units; p.currency = code;
+    dirty.p = true; flush(); prod(); sales(); reports(); analytics(); toast('Product units and currency updated. Past sales keep their saved conversion details.');
   }
 
   function flashRow(tr) { tr.classList.remove('flash'); void tr.offsetWidth; tr.classList.add('flash'); tr.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
@@ -769,6 +790,8 @@
       dirty.p = true; flush(); sales(); reports(); analytics(); toast(t('products.updated'));
     });
     $('productsBody').addEventListener('click', async e => {
+      const ub = e.target.closest('.units-btn');
+      if (ub) { const tr = ub.closest('tr'), p = products.find(x => String(x.id) === String(tr?.dataset.pid)); editProductUnits(p); return; }
       const sb = e.target.closest('.scan-row');
       if (sb) {
         if (!guard()) return;
