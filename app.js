@@ -840,7 +840,7 @@
     $('exportCustomBtn').addEventListener('click', () => { const out = [header]; dateList($('reportFrom').value, $('reportTo').value).forEach(d => (days[d]?.rows || []).forEach(r => out.push(line(d, r)))); download('stockledger-report.csv', csv(out)); });
     $('exportAllBtn').addEventListener('click', () => { const out = [header]; Object.values(days).filter(d => d && isYmd(d.date)).sort((a, b) => a.date.localeCompare(b.date)).forEach(d => (d.rows || []).forEach(r => out.push(line(d.date, r)))); download('stockledger-all-reports.csv', csv(out)); });
     $('importBtn').addEventListener('click', importFile);
-    $('downloadTemplateBtn').addEventListener('click', () => download('stockledger-stock-template.csv', csv([['Category', 'Product', 'SKU', 'Barcode', 'Unit Price', 'Opening Stock'], ['Drinks', 'Coke 50cl', 'DR-001', '5449000000996', 500, 20], ['Snacks', 'Meat Pie', 'SN-001', '', 700, 20], ['Bread', 'Medium Bread', 'BR-001', '', 1000, 15]])));
+    $('downloadTemplateBtn').addEventListener('click', () => download('stockledger-stock-template.csv', csv([['Category', 'Product', 'SKU', 'Barcode', 'Unit Price', 'Opening Stock', 'Base Unit', 'Selling Units', 'Currency'], ['Oil', 'Palm Oil', 'OIL-001', '', 1200, 100, 'Litre', 'Litre=1; Full bottle=1; Half bottle=0.5; Paint bucket=4; Drum=200', 'NGN'], ['Grains', 'Rice', 'GR-001', '', 900, 50, 'kg', 'kg=1; Bag=50; Half bag=25; Quarter bag=12.5; Derica=2; Half derica=1; Ike=5; Half ike=2.5; Congo=1', 'NGN'], ['Snacks', 'Meat Pie', 'SN-001', '', 700, 20, 'Piece', 'Piece=1', 'NGN']])))
     $('logoutBtn').addEventListener('click', logout);
     $('saveSettingsBtn').addEventListener('click', saveSettings);
     $('resetDataBtn').addEventListener('click', resetData);
