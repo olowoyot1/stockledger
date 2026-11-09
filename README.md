@@ -29,6 +29,12 @@ Rotating `SESSION_SECRET` signs everyone out. Pushing a new version of the app u
 update public.dc_workspaces set plan='active', paid_until = now() + interval '1 month' where username='customer@example.com';
 ```
 
+## Deployment note
+This is a static PWA plus one serverless function (`api/cloud.js`), **not** a Next.js app. `vercel.json` therefore sets `framework: null` and `outputDirectory: "."`. Do not add a Next.js build back: it replaces the working UI with a non-functional mock.
+
+## Design
+OPay-inspired: brand green (`#00b876`), green gradient header, floating tab card, balance-card hero metric, rounded white cards, pill buttons and a bottom icon tab bar on phones. Tokens are at the top of `styles.css`; the OPay layer is at the bottom.
+
 ## Development
 ```bash
 npm test        # Node 22+, no dependencies
