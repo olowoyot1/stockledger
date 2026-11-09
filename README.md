@@ -10,6 +10,8 @@ Sales, stock, credit-sales and debtor tracking. Each business signs up, gets an 
 - **Plans:** `trial` → writes allowed for 14 days; `active` → allowed until `paid_until`; expired/`suspended` → read-only (the app shows a banner and disables editing; the API answers 402). Data stays viewable and exportable.
 - **Roles:** `owner` (manages staff, can reset data), `staff` (record sales, change own password), `superadmin` (Companies tab, never expires).
 - **Sync:** merges are per-record and server-side. Deleted days/products are tombstoned so they cannot be resurrected by a stale device; concurrent saves are detected with optimistic locking and re-merged; "Reset App Data" is a real cloud-wide reset that other devices pick up.
+- **Nigerian market units:** each product can define a base stock unit and multiple selling units (for example paint bucket, derica, half derica, full/half bottle, bag, half/quarter bag, ike, half ike, drum and congo). Each selling unit stores its own conversion factor to that product's base unit. Conversions are trader-defined; no universal bucket/bag/ike size is assumed. Sales save the selected unit, quantity, conversion factor, currency and price snapshot, while stock is deducted in the base unit.
+- **Multi-currency:** products can be priced in ISO currency codes (NGN, USD, GBP, EUR, GHS, XAF, KES, ZAR and other valid three-letter codes). Reports group sales by currency instead of adding unlike currencies together.
 - **Audit log:** super-admin actions (create, extend, delete company) are written to the append-only `dc_audit_logs` table. Logging is best-effort and never blocks the action.
 - **Shared devices:** logging out, or signing in as a different business, clears local data.
 

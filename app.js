@@ -21,7 +21,10 @@
   const today = () => ymd(new Date());
   const isYmd = d => /^\d{4}-\d{2}-\d{2}$/.test(d || '');
   const fd = d => isYmd(d) ? d.slice(8, 10) + '/' + d.slice(5, 7) + '/' + d.slice(0, 4) : String(d || '');
-  const money = x => '₦' + Number(x || 0).toLocaleString('en-NG', { maximumFractionDigits: 2 });
+  const money = (x, currency = 'NGN') => { try { return new Intl.NumberFormat('en-NG', { style: 'currency', currency, maximumFractionDigits: 2 }).format(Number(x || 0)); } catch { return currency + ' ' + Number(x || 0).toLocaleString('en-NG', { maximumFractionDigits: 2 }); } };
+  const productUnits = p => Array.isArray(p?.units) && p.units.length ? p.units : [{ name: p?.baseUnit || 'Piece', factor: 1 }];
+  const NIGERIAN_UNIT_NAMES = ['Paint bucket', 'Derica', 'Half derica', 'Full bottle', 'Half bottle', 'Bag', 'Half bag', 'Quarter bag', 'Half ike', 'Ike', 'Drum', 'Congo'];
+  const unitFactor = (p, name) => Number(productUnits(p).find(u => u.name === name)?.factor || 0);
   const uid = p => p + '-' + (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2, 10));
   const dayTime = d => Date.parse(d?.updatedAt || d?.savedAt || '') || 0;
   const normalize = x => {
@@ -66,7 +69,7 @@
   ensureSkus();
 
   /* ---------------- stock maths ---------------- */
-  const calc = r => { const available = num(r.opening) + num(r.added), closing = Math.min(num(r.closing), available), sold = available - closing; return { available, closing, sold, sales: sold * num(r.price) }; };
+  const calc = r => { const available = num(r.opening) + num(r.added), closing = Math.min(num(r.closing), available), sold = available - closing; return { available, closing, sold, sales: Number.isFinite(Number(r.salesTotal)) ? num(r.salesTotal) + Math.max(0, sold - (r.transactions || []).reduce((n, tx) => n + num(tx.baseQty), 0)) * num(r.price) : sold * num(r.price) }; };
   const latestDay = () => Object.keys(days).filter(k => days[k]?.rows?.length).sort().pop() || '';
   const isCurrent = d => d >= today() || d >= latestDay();
   function openStock(p, d) {
@@ -83,8 +86,8 @@
     p.price = price; dirty.p = true; return true;
   }
   function totals(rs) {
-    const out = { sales: 0, units: 0, added: 0, closing: 0, p: {}, c: {} };
-    rs.forEach(r => { const z = calc(r); out.sales += z.sales; out.units += z.sold; out.added += num(r.added); out.closing += z.closing; out.p[r.name] = (out.p[r.name] || 0) + z.sales; out.c[r.category] = (out.c[r.category] || 0) + z.sales; });
+    const out = { sales: 0, salesByCurrency: {}, units: 0, added: 0, closing: 0, p: {}, c: {} };
+    rs.forEach(r => { const z = calc(r); out.sales += z.sales; const cur = r.currency || 'NGN'; out.salesByCurrency[cur] = (out.salesByCurrency[cur] || 0) + z.sales; out.units += z.sold; out.added += num(r.added); out.closing += z.closing; out.p[r.name] = (out.p[r.name] || 0) + z.sales; out.c[r.category] = (out.c[r.category] || 0) + z.sales; });
     return out;
   }
   function dateList(a, b) {
@@ -242,20 +245,20 @@
     const d = curDate(), saved = days[d]?.rows || [];
     rows = products.map(p => {
       const o = saved.find(x => x.id === p.id), opening = o ? num(o.opening) : openStock(p, d);
-      return { id: p.id, category: p.category, name: p.name, price: num(o?.price ?? p.price), opening, added: num(o?.added), closing: o ? num(o.closing) : opening };
+      return { id: p.id, category: p.category, name: p.name, price: num(o?.price ?? p.price), opening, added: num(o?.added), closing: o ? num(o.closing) : opening, baseUnit: o?.baseUnit || p.baseUnit || 'Piece', units: Array.isArray(o?.units) && o.units.length ? o.units : productUnits(p), currency: o?.currency || p.currency || 'NGN', salesTotal: o?.salesTotal, transactions: Array.isArray(o?.transactions) ? o.transactions : [] };
     });
     const skuOf = new Map(products.map(p => [p.id, p.sku])), barcodeOf = new Map(products.map(p => [p.id, p.barcode]));
     const q = ($('salesSearch').value || '').toLowerCase();
     const visible = rows.filter(r => (r.name + ' ' + r.category + ' ' + (skuOf.get(r.id) || '') + ' ' + (barcodeOf.get(r.id) || '')).toLowerCase().includes(q));
     $('salesBody').innerHTML = visible.map(r => {
       const z = calc(r), nm = esc(r.name);
-      const cell = (f, v, label, extra = '') => '<td><input data-f="' + f + '" type="number" min="0" inputmode="numeric" value="' + v + '" ' + extra + ' aria-label="' + th(label) + ': ' + nm + '"></td>';
+      const cell = (f, v, label, extra = '') => '<td><input data-f="' + f + '" type="number" min="0" step="any" inputmode="decimal" value="' + v + '" ' + extra + ' aria-label="' + th(label) + ': ' + nm + '"></td>';
       return '<tr data-id="' + esc(r.id) + '"><td>' + esc(r.category) + '</td><td><b>' + nm + '</b><small class="muted"> ' + esc(skuOf.get(r.id) || '') + '</small></td>'
         + cell('opening', r.opening, 'col.opening') + cell('added', r.added, 'col.additions') + '<td class="av">' + z.available + '</td>'
         + cell('closing', z.closing, 'col.closing', 'max="' + z.available + '"')
         + '<td class="sold"><input data-f="sold" type="number" min="0" step="any" inputmode="decimal" max="' + z.available + '" value="' + z.sold + '" aria-label="' + th('sales.ariaSold', { name: r.name }) + '"></td>'
-        + '<td><div class="add-sale"><input class="add-qty" type="number" min="0.01" step="any" inputmode="decimal" placeholder="' + th('sales.qty') + '" aria-label="' + th('sales.ariaAdd', { name: r.name }) + '"><button class="btn add-sale-btn" type="button">' + th('sales.add') + '</button></div></td>'
-        + '<td><input data-f="price" type="number" min="0" step="any" inputmode="decimal" value="' + r.price + '" aria-label="' + th('col.unitPrice') + ': ' + nm + '"></td><td class="rev"><b>' + money(z.sales) + '</b></td></tr>';
+        + '<td><div class="add-sale market-sale"><input class="add-qty" type="number" min="0.001" step="any" inputmode="decimal" placeholder="' + th('sales.qty') + '" aria-label="' + th('sales.ariaAdd', { name: r.name }) + '"><select class="sale-unit" aria-label="Selling unit">' + r.units.map(u => '<option value="' + esc(u.name) + '">' + esc(u.name) + '</option>').join('') + '</select><input class="sale-price" type="number" min="0" step="any" inputmode="decimal" value="' + (r.price * (r.units[0]?.factor || 1)) + '" aria-label="Price per selling unit"><button class="btn add-sale-btn" type="button">' + th('sales.add') + '</button></div></td>'
+        + '<td><input data-f="price" type="number" min="0" step="any" inputmode="decimal" value="' + r.price + '" aria-label="' + th('col.unitPrice') + ': ' + nm + '"></td><td class="rev"><b>' + money(z.sales, r.currency || 'NGN') + '</b></td></tr>';
     }).join('') || '<tr><td colspan="10" class="muted">' + th(products.length ? 'sales.empty' : 'products.empty') + '</td></tr>';
     summary(); saveLabel();
   }
@@ -267,14 +270,15 @@
     $('cloneDayBtn').disabled = !has || ro; $('changeDateBtn').disabled = !has || ro; $('clearDayBtn').disabled = !has || ro;
     $('salesBody').querySelectorAll('input,button').forEach(x => { x.disabled = lk; });
   }
+  function salesMoney(rs) { const tt = totals(rs); return Object.entries(tt.salesByCurrency).map(([c, v]) => money(v, c)).join(' · ') || money(0, 'NGN'); }
   function summary() {
     const tt = totals(rows);
-    $('mSales').textContent = money(tt.sales); $('mUnits').textContent = tt.units; $('mAdded').textContent = tt.added; $('mClosing').textContent = tt.closing;
-    $('categorySummary').innerHTML = Object.entries(tt.c).map(([k, v]) => '<div class="category-card"><span class="muted">' + esc(k) + '</span><strong>' + money(v) + '</strong><small>' + th('sales.unitsSold', { n: rows.filter(r => r.category === k).reduce((n, r) => n + calc(r).sold, 0) }) + '</small></div>').join('');
+    $('mSales').textContent = salesMoney(rows); $('mUnits').textContent = tt.units; $('mAdded').textContent = tt.added; $('mClosing').textContent = tt.closing;
+    $('categorySummary').innerHTML = Object.entries(tt.c).map(([k, v]) => '<div class="category-card"><span class="muted">' + esc(k) + '</span><strong>' + salesMoney(rows.filter(r => r.category === k)) + '</strong><small>' + th('sales.unitsSold', { n: rows.filter(r => r.category === k).reduce((n, r) => n + calc(r).sold, 0) }) + '</small></div>').join('');
   }
   function refreshRow(tr, r, active) {
     const z = calc(r); r.closing = z.closing;
-    tr.querySelector('.av').textContent = z.available; tr.querySelector('.rev b').textContent = money(z.sales);
+    tr.querySelector('.av').textContent = z.available; tr.querySelector('.rev b').textContent = money(z.sales, r.currency || 'NGN');
     const c = tr.querySelector('[data-f="closing"]'), s = tr.querySelector('[data-f="sold"]');
     c.max = z.available; s.max = z.available;
     if (c !== active || num(c.value) > z.available) c.value = z.closing;
@@ -293,11 +297,13 @@
   }
   function addSale(tr) {
     if (locked()) { toast(t(canEdit() ? 'sales.clickEdit' : 'acct.readOnlyToast')); return; }
-    const q = tr.querySelector('.add-qty'), n = num(q.value), r = rows.find(x => x.id === tr.dataset.id);
-    if (!r || !n) { q.focus(); return; }
-    const z = calc(r);
-    if (n > z.closing) { toast(t('sales.onlyLeft', { n: z.closing, name: r.name })); return; }
-    r.closing = z.closing - n; q.value = '';
+    const q = tr.querySelector('.add-qty'), n = num(q.value), r = rows.find(x => x.id === tr.dataset.id), p = products.find(x => x.id === tr.dataset.id), unitName = tr.querySelector('.sale-unit')?.value || p?.baseUnit || 'Piece', factor = r ? Number(r.units?.find(u => u.name === unitName)?.factor || 0) : 0, unitPrice = num(tr.querySelector('.sale-price')?.value);
+    if (!r || !p || !n || !factor) { q.focus(); return; }
+    const consumed = n * factor, z = calc(r);
+    if (consumed > z.closing + 1e-9) { toast(t('sales.onlyLeft', { n: z.closing, name: r.name })); return; }
+    r.closing = Math.max(0, z.closing - consumed);
+    r.transactions = [...(r.transactions || []), { id: uid('TX'), qty: n, unit: unitName, factor, baseQty: consumed, unitPrice, currency: r.currency || p.currency || 'NGN', total: n * unitPrice, at: new Date().toISOString() }];
+    r.salesTotal = (Number(r.salesTotal) || 0) + n * unitPrice; q.value = '';
     refreshRow(tr, r); summary(); persistDay(); toast(t('sales.addedSold', { n, name: r.name }));
   }
   function cloneDay(from, to) {
@@ -348,8 +354,8 @@
       + '<td><div class="input-with-btn"><input data-f="barcode" maxlength="64" autocomplete="off" autocapitalize="none" spellcheck="false" value="' + esc(x.barcode || '') + '" aria-label="' + th('products.ariaBarcode', { name: x.name }) + '"' + (ro ? ' disabled' : '') + '>'
       + '<button class="btn btn-light scan-row" type="button" aria-label="' + th('products.ariaScan', { name: x.name }) + '"' + (ro ? ' disabled' : '') + '>' + th('scan.button') + '</button></div></td>'
       + '<td><input data-f="price" type="number" min="0" step="any" value="' + num(x.price) + '"' + (ro ? ' disabled' : '') + '></td>'
-      + '<td><input data-f="opening" type="number" min="0" value="' + num(x.opening) + '"' + (ro ? ' disabled' : '') + '></td>'
-      + '<td><button class="btn btn-danger rm" type="button"' + (ro ? ' disabled' : '') + '>' + th('common.remove') + '</button></td></tr>').join('')
+      + '<td><input data-f="opening" type="number" min="0" step="any" value="' + num(x.opening) + '"' + (ro ? ' disabled' : '') + '></td>'
+      + '<td><small class="muted">' + esc(x.baseUnit || 'Piece') + ' · ' + esc(x.currency || 'NGN') + '</small><button class="btn units-btn" type="button"' + (ro ? ' disabled' : '') + '>Units / Currency</button><button class="btn btn-danger rm" type="button"' + (ro ? ' disabled' : '') + '>' + th('common.remove') + '</button></td></tr>').join('')
       || '<tr><td colspan="7" class="muted">' + th('products.empty') + '</td></tr>';
     $('addProductBtn').disabled = ro;
   }
@@ -379,8 +385,17 @@
     $('productForm').reset();
     $('pCategory').innerHTML = categoryOptionsHtml(allCategories(), CATS[0]);
     $('pNewCategory').value = ''; $('pNewCategoryRow').classList.add('hidden');
+    if ($('pBaseUnit')) $('pBaseUnit').value = 'Piece';
+    if ($('pUnits')) $('pUnits').value = '';
+    if ($('pCurrency')) $('pCurrency').value = 'NGN';
     $('pBarcode').value = cleanCode(barcode);
     $('productDialog').showModal(); $('pName').focus();
+  }
+  function insertLocalUnitNames() {
+    const base = ($('pBaseUnit').value || '').trim() || 'kg';
+    $('pUnits').value = [base + '=1', ...NIGERIAN_UNIT_NAMES.filter(n => n.toLowerCase() !== base.toLowerCase()).map(n => n + '=')].join('\n');
+    $('pUnits').focus();
+    toast('Enter how many ' + base + ' each local measure contains. Leave unused measures blank.');
   }
   function submitProduct(e) {
     e.preventDefault();
@@ -394,11 +409,38 @@
     }
     const barcode = cleanCode($('pBarcode').value), owner = barcodeOwner(barcode);
     if (owner) { toast(t('products.barcodeTaken', { code: barcode, name: owner.name })); $('pBarcode').focus(); return; }
-    const p = { id: uid('P'), sku: '', category: normalize(category), name, price: num($('pPrice').value), opening: Math.floor(num($('pOpening').value)) };
+    const baseUnit = ($('pBaseUnit')?.value || 'Piece').trim() || 'Piece';
+    const units = String($('pUnits')?.value || baseUnit + '=1').split(/\r?\n/).map(line => { const at = line.lastIndexOf('='); return at < 0 ? null : { name: line.slice(0, at).trim().slice(0, 40), factor: Number(line.slice(at + 1).trim()) }; }).filter(u => u && u.name && Number.isFinite(u.factor) && u.factor > 0 && u.factor <= 1e9);
+    if (!units.some(u => u.name === baseUnit && u.factor === 1)) units.unshift({ name: baseUnit, factor: 1 });
+    if (!units.length) { toast('Add at least one valid selling unit as Unit=quantity.'); return; }
+    const p = { id: uid('P'), sku: '', category: normalize(category), name, price: num($('pPrice').value), opening: num($('pOpening').value), baseUnit, units, currency: $('pCurrency')?.value || 'NGN' };
     if (barcode) p.barcode = barcode;
     products.push(p);
     ensureSkus(); if (!write(KEYS.products, products)) { toast(t('toast.storageFull')); return; }
     $('productDialog').close(); prod(); sales(); toast(t('products.added'));
+  }
+
+  function editProductUnits(p) {
+    if (!guard() || !p) return;
+    const base = prompt('Base stock unit for ' + p.name + ' (e.g. kg, litre, bag):', p.baseUnit || 'Piece');
+    if (base === null || !base.trim()) return;
+    const hasHistory = Object.values(days).some(d => (d?.rows || []).some(r => r.id === p.id));
+    if (hasHistory && base.trim().toLowerCase() !== String(p.baseUnit || 'Piece').toLowerCase()) { toast('Base stock unit cannot be changed after sales history exists. Add a new product if you need a different base unit.'); return; }
+    const current = productUnits(p).map(u => u.name + '=' + u.factor).join('\n');
+    const raw = prompt('Enter each selling unit on a new line as Unit=quantity in ' + base + '. Blank lines are ignored. Example: Half bag=0.5', current);
+    if (raw === null) return;
+    const units = raw.split(/\r?\n/).map(line => {
+      const at = line.lastIndexOf('='), name = at < 0 ? '' : line.slice(0, at).trim(), factor = at < 0 ? NaN : Number(line.slice(at + 1).trim());
+      return name && Number.isFinite(factor) && factor > 0 && factor <= 1e9 ? { name: name.slice(0, 40), factor } : null;
+    }).filter(Boolean);
+    if (!units.some(u => u.name.toLowerCase() === base.trim().toLowerCase() && u.factor === 1)) units.unshift({ name: base.trim().slice(0, 40), factor: 1 });
+    if (units.length > 40) { toast('Maximum 40 selling units per product.'); return; }
+    const currency = prompt('Currency code for this product (NGN, USD, GBP, EUR, GHS, XAF, KES, ZAR):', p.currency || 'NGN');
+    if (currency === null) return;
+    const code = currency.trim().toUpperCase();
+    if (!/^[A-Z]{3}$/.test(code)) { toast('Enter a valid three-letter currency code.'); return; }
+    p.baseUnit = base.trim().slice(0, 40); p.units = units; p.currency = code;
+    dirty.p = true; flush(); prod(); sales(); reports(); analytics(); toast('Product units and currency updated. Past sales keep their saved conversion details.');
   }
 
   function flashRow(tr) { tr.classList.remove('flash'); void tr.offsetWidth; tr.classList.add('flash'); tr.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
@@ -445,7 +487,7 @@
     const ds = Object.values(days).filter(d => d && isYmd(d.date)).sort((a, b) => b.date.localeCompare(a.date));
     $('reportsBody').innerHTML = ds.map(d => {
       const tt = totals(d.rows || []), dt = esc(d.date);
-      return '<tr><td>' + fd(d.date) + (d.savedAt ? '' : ' <span class="badge">' + th('reports.draft') + '</span>') + '</td><td>' + money(tt.sales) + '</td><td>' + tt.units + '</td><td>' + tt.added + '</td><td>' + tt.closing + '</td>'
+      return '<tr><td>' + fd(d.date) + (d.savedAt ? '' : ' <span class="badge">' + th('reports.draft') + '</span>') + '</td><td>' + salesMoney(d.rows || []) + '</td><td>' + tt.units + '</td><td>' + tt.added + '</td><td>' + tt.closing + '</td>'
         + '<td><div class="reports-actions"><button class="btn open" data-date="' + dt + '" type="button">' + th('common.edit') + '</button><button class="btn move" data-date="' + dt + '" type="button">' + th('sales.changeDate') + '</button><button class="btn clone" data-date="' + dt + '" type="button">' + th('sales.clone') + '</button></div></td></tr>';
     }).join('') || '<tr><td colspan="6" class="muted">' + th('reports.none') + '</td></tr>';
     custom(); history();
@@ -471,10 +513,10 @@
     if (!p) { $('productHistory').innerHTML = '<p class="muted pad">' + th('reports.noProducts') + '</p>'; return; }
     const h = historyRows(p.id), units = h.reduce((s, x) => s + x.z.sold, 0), sl = h.reduce((s, x) => s + x.z.sales, 0), added = h.reduce((s, x) => s + num(x.r.added), 0), log = (p.priceLog || []).slice().reverse();
     const box = (k, v) => '<div class="summary-box"><span>' + th(k) + '</span><strong>' + v + '</strong></div>';
-    $('productHistory').innerHTML = '<div class="report-summary pad">' + box('reports.currentPrice', money(p.price)) + box('reports.totalUnits', units) + box('reports.totalSales', money(sl)) + box('m.added', added) + '</div>'
+    $('productHistory').innerHTML = '<div class="report-summary pad">' + box('reports.currentPrice', money(p.price, p.currency || 'NGN')) + box('reports.totalUnits', units) + box('reports.totalSales', money(sl, p.currency || 'NGN')) + box('m.added', added) + '</div>'
       + '<div class="table-wrap"><table><thead><tr>' + ['col.date', 'col.opening', 'col.additions', 'col.available', 'col.closing', 'col.sold', 'col.unitPrice', 'col.sales'].map(k => '<th scope="col">' + th(k) + '</th>').join('') + '</tr></thead><tbody>'
       + (h.slice().reverse().map(x => rowCells(fd(x.d), num(x.r.opening), num(x.r.added), x.z.available, x.z.closing, '<b>' + x.z.sold + '</b>',
-        money(x.r.price) + (x.was !== null ? '<small class="price-change">' + th('reports.was', { price: money(x.was) }) + '</small>' : ''), '<b>' + money(x.z.sales) + '</b>')).join('')
+        money(x.r.price, p.currency || 'NGN') + (x.was !== null ? '<small class="price-change">' + th('reports.was', { price: money(x.was, p.currency || 'NGN') }) + '</small>' : ''), '<b>' + money(x.z.sales) + '</b>')).join('')
         || '<tr><td colspan="8" class="muted">' + th('reports.noActivity') + '</td></tr>') + '</tbody></table></div>'
       + '<div class="pad"><h3>' + th('reports.priceChanges') + '</h3>' + (log.map(l => '<div class="list-row"><span>' + fd(ymd(new Date(l.at))) + ' ' + pad(new Date(l.at).getHours()) + ':' + pad(new Date(l.at).getMinutes())
         + ' <small class="muted">' + th('reports.via', { src: t(SRC[l.src] || '') === (SRC[l.src] || '') ? l.src : t(SRC[l.src]) }) + '</small></span><b>' + money(l.from) + ' → ' + money(l.to) + '</b></div>').join('') || '<p class="muted">' + th('reports.noPriceChanges') + '</p>') + '</div>';
@@ -487,23 +529,22 @@
     const rs = []; list.forEach(d => (days[d]?.rows || []).forEach(r => rs.push(r)));
     const tt = totals(rs), saved = list.filter(d => days[d]).length, top = Object.entries(tt.p).sort((x, y) => y[1] - x[1]).slice(0, 8);
     const box = (k, v) => '<div class="summary-box"><span>' + th(k) + '</span><strong>' + v + '</strong></div>';
-    $('customReport').innerHTML = '<div class="report-summary">' + box('reports.totalSales', money(tt.sales)) + box('m.units', tt.units) + box('m.added', tt.added) + box('reports.savedDays', saved + '/' + list.length) + '</div>'
-      + '<div class="two-col"><div class="panel"><h3>' + th('reports.topProducts') + '</h3>' + (top.map(x => '<div class="list-row"><span>' + esc(x[0]) + '</span><b>' + money(x[1]) + '</b></div>').join('') || '<p class="muted">' + th('reports.noData') + '</p>')
-      + '</div><div class="panel"><h3>' + th('reports.categorySales') + '</h3>' + Object.entries(tt.c).sort((x, y) => y[1] - x[1]).map(x => '<div class="list-row"><span>' + esc(x[0]) + '</span><b>' + money(x[1]) + '</b></div>').join('') + '</div></div>';
+    $('customReport').innerHTML = '<div class="report-summary">' + box('reports.totalSales', salesMoney(rs)) + box('m.units', tt.units) + box('m.added', tt.added) + box('reports.savedDays', saved + '/' + list.length) + '</div>'
+      + '<div class="two-col"><div class="panel"><h3>' + th('reports.topProducts') + '</h3>' + (top.map(x => '<div class="list-row"><span>' + esc(x[0]) + '</span><b>' + salesMoney(rs.filter(r => r.name === x[0])) + '</b></div>').join('') || '<p class="muted">' + th('reports.noData') + '</p>')
+      + '</div><div class="panel"><h3>' + th('reports.categorySales') + '</h3>' + Object.entries(tt.c).sort((x, y) => y[1] - x[1]).map(x => '<div class="list-row"><span>' + esc(x[0]) + '</span><b>' + salesMoney(rs.filter(r => r.category === x[0])) + '</b></div>').join('') + '</div></div>';
   }
   function analytics() {
     const n = Number($('analyticsRange').value || 7), ds = [];
     for (let i = n - 1; i >= 0; i--) { const d = new Date(); d.setDate(d.getDate() - i); ds.push(ymd(d)); }
     const v = ds.map(d => ({ d, t: totals(days[d]?.rows || []) })), total = v.reduce((s, x) => s + x.t.sales, 0), units = v.reduce((s, x) => s + x.t.units, 0);
-    const best = [...v].sort((a, b) => b.t.sales - a.t.sales)[0], max = Math.max(1, ...v.map(x => x.t.sales)), active = v.filter(x => x.t.sales || x.t.units || x.t.added || x.t.closing).length;
-    $('aSales').textContent = money(total); $('aAvg').textContent = money(active ? total / active : 0); $('aUnits').textContent = units;
-    $('aBest').textContent = best?.t.sales ? fd(best.d) + ' ' + money(best.t.sales) : '—';
-    $('chart').innerHTML = v.map(x => '<div class="bar-wrap" title="' + fd(x.d) + ' — ' + money(x.t.sales) + '"><div class="bar" data-h="' + Math.max(2, x.t.sales / max * 210) + '"></div><div class="bar-label">' + fd(x.d).slice(0, 5) + '</div></div>').join('');
-    $('chart').querySelectorAll('.bar').forEach(b => { b.style.height = b.dataset.h + 'px'; }); // CSSOM, so no inline-style CSP exception is needed
+    const active = v.filter(x => x.t.sales || x.t.units || x.t.added || x.t.closing).length;
+    const periodRows = ds.flatMap(d => days[d]?.rows || []); $('aSales').textContent = salesMoney(periodRows); $('aAvg').textContent = salesMoney(periodRows.map(r => ({ ...r, salesTotal: calc(r).sales / Math.max(1, active), transactions: [], price: 0 }))); $('aUnits').textContent = units;
+    const currencies = new Set(periodRows.map(r => r.currency || 'NGN')); $('aBest').textContent = currencies.size === 1 ? (v.filter(x => x.t.sales).sort((a, b) => b.t.sales - a.t.sales)[0]?.d || '—') : 'See currency totals';
+    const currencyTotals = {}; periodRows.forEach(r => { const c = r.currency || 'NGN'; currencyTotals[c] = (currencyTotals[c] || 0) + calc(r).sales; }); $('chart').innerHTML = '<div class="list-row"><span>Sales by currency</span><b>' + Object.entries(currencyTotals).map(([c, n]) => money(n, c)).join(' · ') + '</b></div>';
     const p = {}, c = {};
     v.forEach(x => (days[x.d]?.rows || []).forEach(r => { const z = calc(r); (p[r.name] = p[r.name] || { sales: 0, units: 0 }); p[r.name].sales += z.sales; p[r.name].units += z.sold; c[r.category] = (c[r.category] || 0) + z.sales; }));
-    $('topProducts').innerHTML = Object.entries(p).sort((a, b) => b[1].sales - a[1].sales).slice(0, 10).map(x => '<div class="list-row"><span>' + esc(x[0]) + '<small class="muted"> ' + th('an.qty', { n: x[1].units }) + '</small></span><b>' + money(x[1].sales) + '</b></div>').join('') || '<p class="muted">' + th('an.none') + '</p>';
-    $('catAnalytics').innerHTML = Object.entries(c).sort((a, b) => b[1] - a[1]).map(x => '<div class="list-row"><span>' + esc(x[0]) + '</span><b>' + money(x[1]) + '</b></div>').join('') || '<p class="muted">' + th('an.none') + '</p>';
+    $('topProducts').innerHTML = Object.entries(p).sort((a, b) => b[1].sales - a[1].sales).slice(0, 10).map(x => '<div class="list-row"><span>' + esc(x[0]) + '<small class="muted"> ' + th('an.qty', { n: x[1].units }) + '</small></span><b>' + money(x[1].sales, products.find(p => p.name === x[0])?.currency || 'NGN') + '</b></div>').join('') || '<p class="muted">' + th('an.none') + '</p>';
+    $('catAnalytics').innerHTML = Object.entries(c).sort((a, b) => b[1] - a[1]).map(x => '<div class="list-row"><span>' + esc(x[0]) + '</span><b>' + salesMoney(periodRows.filter(r => r.category === x[0])) + '</b></div>').join('') || '<p class="muted">' + th('an.none') + '</p>';
   }
   function rangeLabels() { [...$('analyticsRange').options].forEach(o => { o.textContent = t('an.lastN', { n: o.value }); }); }
 
@@ -598,15 +639,22 @@
       if (data.length < 2) throw new Error(t('imp.noRows'));
       if (data.length > MAX_IMPORT_ROWS + 1) throw new Error(t('imp.tooMany'));
       const h = data[0].map(x => String(x).trim().toLowerCase().replace(/[_-]+/g, ' ')), ix = (...ks) => { for (const k of ks) { const i = h.indexOf(k); if (i >= 0) return i; } return -1; };
-      const ci = ix('category'), pi = ix('product', 'product name', 'item'), si = ix('sku', 'code', 'product code'), bi = ix('barcode', 'bar code', 'ean', 'upc', 'gtin'), pr = ix('unit price', 'price', 'selling price'), oi = ix('opening stock', 'opening', 'stock');
+      const ci = ix('category'), pi = ix('product', 'product name', 'item'), si = ix('sku', 'code', 'product code'), bi = ix('barcode', 'bar code', 'ean', 'upc', 'gtin'), pr = ix('unit price', 'price', 'selling price'), oi = ix('opening stock', 'opening', 'stock'), bu = ix('base unit', 'stock unit'), us = ix('selling units', 'unit conversions', 'units'), cu = ix('currency', 'currency code');
       if ([ci, pi, pr, oi].some(x => x < 0)) throw new Error(t('imp.cols'));
       let count = 0;
       data.slice(1).forEach(r => {
         const name = String(r[pi] ?? '').trim().slice(0, 120); if (!name) return;
         const sku = String(si >= 0 ? r[si] : '').trim().slice(0, 32), barcode = bi >= 0 ? cleanCode(r[bi]) : '';
         let p = (barcode && products.find(x => x.barcode === barcode)) || (sku && products.find(x => x.sku === sku)) || products.find(x => x.name.toLowerCase() === name.toLowerCase());
-        if (p) { p.category = normalize(r[ci]); p.name = name; setPrice(p, looseNum(r[pr]), 'Excel import', today()); p.opening = Math.floor(looseNum(r[oi])); }
-        else { p = { id: uid('P'), sku, category: normalize(r[ci]), name, price: looseNum(r[pr]), opening: Math.floor(looseNum(r[oi])) }; products.push(p); } // fresh ID: never collides with a removed product's tombstone
+        const baseUnit = bu >= 0 && String(r[bu] || '').trim() ? String(r[bu]).trim().slice(0, 40) : (p?.baseUnit || 'Piece');
+        const importedUnits = us >= 0 ? String(r[us] || '').split(/[;\\n]/).map(line => { const at = line.lastIndexOf('='); const unit = at < 0 ? '' : line.slice(0, at).trim(); const factor = at < 0 ? NaN : Number(line.slice(at + 1).trim()); return unit && Number.isFinite(factor) && factor > 0 ? { name: unit.slice(0, 40), factor } : null; }).filter(Boolean) : [];
+        const currency = cu >= 0 && /^[A-Z]{3}$/i.test(String(r[cu] || '').trim()) ? String(r[cu]).trim().toUpperCase() : (p?.currency || 'NGN');
+        if (p) { p.category = normalize(r[ci]); p.name = name; setPrice(p, looseNum(r[pr]), 'Excel import', today()); p.opening = looseNum(r[oi]); }
+        else { p = { id: uid('P'), sku, category: normalize(r[ci]), name, price: looseNum(r[pr]), opening: looseNum(r[oi]), baseUnit, units: [{ name: baseUnit, factor: 1 }], currency }; products.push(p); } // fresh ID: never collides with a removed product's tombstone
+        if (bu >= 0 && String(r[bu] || '').trim()) p.baseUnit = baseUnit;
+        if (importedUnits.length) p.units = importedUnits;
+        if (!Array.isArray(p.units) || !p.units.some(u => u.name.toLowerCase() === p.baseUnit.toLowerCase() && u.factor === 1)) p.units = [{ name: p.baseUnit, factor: 1 }, ...(p.units || [])];
+        p.currency = currency;
         if (barcode && !barcodeOwner(barcode, p.id)) p.barcode = barcode;
         count++;
       });
@@ -686,7 +734,7 @@
       if (locked()) return;
       const i = e.target.closest('input[data-f]'), tr = i?.closest('tr'); if (!i || !tr) return;
       const r = rows.find(x => x.id === tr.dataset.id); if (!r) return;
-      const f = i.dataset.f, v = (f === 'price' || f === 'sold') ? num(i.value) : Math.floor(num(i.value));
+      const f = i.dataset.f, v = num(i.value);
       if (f === 'sold') { const av = calc(r).available; r.closing = av - Math.min(v, av); } else r[f] = v;
       refreshRow(tr, r, i); summary(); persistDay();
     });
@@ -695,6 +743,12 @@
       const d = curDate(); if (!isCurrent(d)) return;
       const r = rows.find(x => x.id === tr.dataset.id);
       if (setPrice(products.find(p => p.id === tr.dataset.id), r?.price, 'Daily Sales', d)) { flush(); prod(); toast(t('products.priceSynced')); }
+    });
+    $('salesBody').addEventListener('change', e => {
+      const sel = e.target.closest('.sale-unit'), tr = sel?.closest('tr');
+      if (!sel || !tr) return;
+      const r = rows.find(x => x.id === tr.dataset.id), p = products.find(x => x.id === tr.dataset.id);
+      if (r && p) tr.querySelector('.sale-price').value = (num(r.price) * Number(r.units?.find(u => u.name === sel.value)?.factor || 0)).toFixed(2);
     });
     $('salesBody').addEventListener('click', e => { const b = e.target.closest('.add-sale-btn'); if (b) addSale(b.closest('tr')); });
     $('salesBody').addEventListener('keydown', e => { if (e.key !== 'Enter' || e.isComposing || e.keyCode === 229 || !e.target.classList.contains('add-qty')) return; e.preventDefault(); addSale(e.target.closest('tr')); });
@@ -744,6 +798,8 @@
       dirty.p = true; flush(); sales(); reports(); analytics(); toast(t('products.updated'));
     });
     $('productsBody').addEventListener('click', async e => {
+      const ub = e.target.closest('.units-btn');
+      if (ub) { const tr = ub.closest('tr'), p = products.find(x => String(x.id) === String(tr?.dataset.pid)); editProductUnits(p); return; }
       const sb = e.target.closest('.scan-row');
       if (sb) {
         if (!guard()) return;
@@ -763,6 +819,7 @@
     $('addProductBtn').addEventListener('click', () => openProductDialog());
     $('productsScanBtn').addEventListener('click', scanForProducts);
     $('pCategory').addEventListener('change', toggleNewCategory);
+    $('presetUnitsBtn')?.addEventListener('click', insertLocalUnitNames);
     $('pScanBtn').addEventListener('click', async () => { const code = await scanCode(); if (code) $('pBarcode').value = code; });
     $('pBarcode').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing && e.keyCode !== 229) e.preventDefault(); }); // a handheld scanner's Enter must not submit the form early
     $('productForm').addEventListener('submit', submitProduct);
@@ -774,18 +831,18 @@
     $('companyCreateForm').addEventListener('submit', createCompany);
     $('companiesBody').addEventListener('click', companyAction);
 
-    const header = ['Date', 'Category', 'Product', 'Opening', 'Additions', 'Available', 'Closing', 'Sold', 'Unit Price', 'Sales']; // exports stay in English so they open the same everywhere
-    const line = (d, r) => { const z = calc(r); return [fd(d), r.category, r.name, r.opening, r.added, z.available, z.closing, z.sold, r.price, z.sales]; };
+    const header = ['Date', 'Category', 'Product', 'Base Unit', 'Currency', 'Opening', 'Additions', 'Available', 'Closing', 'Sold', 'Unit Price', 'Sales', 'Sale Details']; // exports stay in English so they open the same everywhere
+    const line = (d, r) => { const z = calc(r); return [fd(d), r.category, r.name, r.baseUnit || 'Piece', r.currency || 'NGN', r.opening, r.added, z.available, z.closing, z.sold, r.price, z.sales, (r.transactions || []).map(tx => tx.qty + ' ' + tx.unit + ' @ ' + tx.unitPrice + ' ' + (tx.currency || r.currency || 'NGN')).join('; ')]; };
     $('exportHistoryBtn').addEventListener('click', () => {
       const p = products.find(x => x.id === $('historyProduct').value); if (!p) return;
-      const out = [['Date', 'Product', 'Opening', 'Additions', 'Available', 'Closing', 'Sold', 'Unit Price', 'Sales']];
-      historyRows(p.id).forEach(x => out.push([fd(x.d), p.name, x.r.opening, x.r.added, x.z.available, x.z.closing, x.z.sold, x.r.price, x.z.sales]));
+      const out = [['Date', 'Product', 'Base Unit', 'Currency', 'Opening', 'Additions', 'Available', 'Closing', 'Sold', 'Unit Price', 'Sales', 'Sale Details']];
+      historyRows(p.id).forEach(x => out.push([fd(x.d), p.name, x.r.baseUnit || p.baseUnit || 'Piece', x.r.currency || p.currency || 'NGN', x.r.opening, x.r.added, x.z.available, x.z.closing, x.z.sold, x.r.price, x.z.sales, (x.r.transactions || []).map(tx => tx.qty + ' ' + tx.unit + ' @ ' + tx.unitPrice + ' ' + (tx.currency || 'NGN')).join('; ')]));
       download('stockledger-history-' + p.name.replace(/[^a-z0-9]+/gi, '-').toLowerCase() + '.csv', csv(out));
     });
     $('exportCustomBtn').addEventListener('click', () => { const out = [header]; dateList($('reportFrom').value, $('reportTo').value).forEach(d => (days[d]?.rows || []).forEach(r => out.push(line(d, r)))); download('stockledger-report.csv', csv(out)); });
     $('exportAllBtn').addEventListener('click', () => { const out = [header]; Object.values(days).filter(d => d && isYmd(d.date)).sort((a, b) => a.date.localeCompare(b.date)).forEach(d => (d.rows || []).forEach(r => out.push(line(d.date, r)))); download('stockledger-all-reports.csv', csv(out)); });
     $('importBtn').addEventListener('click', importFile);
-    $('downloadTemplateBtn').addEventListener('click', () => download('stockledger-stock-template.csv', csv([['Category', 'Product', 'SKU', 'Barcode', 'Unit Price', 'Opening Stock'], ['Drinks', 'Coke 50cl', 'DR-001', '5449000000996', 500, 20], ['Snacks', 'Meat Pie', 'SN-001', '', 700, 20], ['Bread', 'Medium Bread', 'BR-001', '', 1000, 15]])));
+    $('downloadTemplateBtn').addEventListener('click', () => download('stockledger-stock-template.csv', csv([['Category', 'Product', 'SKU', 'Barcode', 'Unit Price', 'Opening Stock', 'Base Unit', 'Selling Units', 'Currency'], ['Oil', 'Palm Oil', 'OIL-001', '', 1200, 100, 'Litre', 'Litre=1; Full bottle=; Half bottle=; Paint bucket=; Drum=; Congo=', 'NGN'], ['Grains', 'Rice', 'GR-001', '', 900, 50, 'kg', 'kg=1; Bag=; Half bag=; Quarter bag=; Derica=; Half derica=; Ike=; Half ike=; Congo=', 'NGN'], ['Snacks', 'Meat Pie', 'SN-001', '', 700, 20, 'Piece', 'Piece=1', 'NGN']])))
     $('logoutBtn').addEventListener('click', logout);
     $('saveSettingsBtn').addEventListener('click', saveSettings);
     $('resetDataBtn').addEventListener('click', resetData);
