@@ -528,8 +528,8 @@
     const tt = totals(rs), saved = list.filter(d => days[d]).length, top = Object.entries(tt.p).sort((x, y) => y[1] - x[1]).slice(0, 8);
     const box = (k, v) => '<div class="summary-box"><span>' + th(k) + '</span><strong>' + v + '</strong></div>';
     $('customReport').innerHTML = '<div class="report-summary">' + box('reports.totalSales', salesMoney(rs)) + box('m.units', tt.units) + box('m.added', tt.added) + box('reports.savedDays', saved + '/' + list.length) + '</div>'
-      + '<div class="two-col"><div class="panel"><h3>' + th('reports.topProducts') + '</h3>' + (top.map(x => '<div class="list-row"><span>' + esc(x[0]) + '</span><b>' + money(x[1]) + '</b></div>').join('') || '<p class="muted">' + th('reports.noData') + '</p>')
-      + '</div><div class="panel"><h3>' + th('reports.categorySales') + '</h3>' + Object.entries(tt.c).sort((x, y) => y[1] - x[1]).map(x => '<div class="list-row"><span>' + esc(x[0]) + '</span><b>' + money(x[1]) + '</b></div>').join('') + '</div></div>';
+      + '<div class="two-col"><div class="panel"><h3>' + th('reports.topProducts') + '</h3>' + (top.map(x => '<div class="list-row"><span>' + esc(x[0]) + '</span><b>' + salesMoney(rs.filter(r => r.name === x[0])) + '</b></div>').join('') || '<p class="muted">' + th('reports.noData') + '</p>')
+      + '</div><div class="panel"><h3>' + th('reports.categorySales') + '</h3>' + Object.entries(tt.c).sort((x, y) => y[1] - x[1]).map(x => '<div class="list-row"><span>' + esc(x[0]) + '</span><b>' + salesMoney(rs.filter(r => r.category === x[0])) + '</b></div>').join('') + '</div></div>';
   }
   function analytics() {
     const n = Number($('analyticsRange').value || 7), ds = [];
@@ -542,7 +542,7 @@
     const p = {}, c = {};
     v.forEach(x => (days[x.d]?.rows || []).forEach(r => { const z = calc(r); (p[r.name] = p[r.name] || { sales: 0, units: 0 }); p[r.name].sales += z.sales; p[r.name].units += z.sold; c[r.category] = (c[r.category] || 0) + z.sales; }));
     $('topProducts').innerHTML = Object.entries(p).sort((a, b) => b[1].sales - a[1].sales).slice(0, 10).map(x => '<div class="list-row"><span>' + esc(x[0]) + '<small class="muted"> ' + th('an.qty', { n: x[1].units }) + '</small></span><b>' + money(x[1].sales, products.find(p => p.name === x[0])?.currency || 'NGN') + '</b></div>').join('') || '<p class="muted">' + th('an.none') + '</p>';
-    $('catAnalytics').innerHTML = Object.entries(c).sort((a, b) => b[1] - a[1]).map(x => '<div class="list-row"><span>' + esc(x[0]) + '</span><b>' + money(x[1]) + '</b></div>').join('') || '<p class="muted">' + th('an.none') + '</p>';
+    $('catAnalytics').innerHTML = Object.entries(c).sort((a, b) => b[1] - a[1]).map(x => '<div class="list-row"><span>' + esc(x[0]) + '</span><b>' + salesMoney(periodRows.filter(r => r.category === x[0])) + '</b></div>').join('') || '<p class="muted">' + th('an.none') + '</p>';
   }
   function rangeLabels() { [...$('analyticsRange').options].forEach(o => { o.textContent = t('an.lastN', { n: o.value }); }); }
 
@@ -644,8 +644,8 @@
         const name = String(r[pi] ?? '').trim().slice(0, 120); if (!name) return;
         const sku = String(si >= 0 ? r[si] : '').trim().slice(0, 32), barcode = bi >= 0 ? cleanCode(r[bi]) : '';
         let p = (barcode && products.find(x => x.barcode === barcode)) || (sku && products.find(x => x.sku === sku)) || products.find(x => x.name.toLowerCase() === name.toLowerCase());
-        if (p) { p.category = normalize(r[ci]); p.name = name; setPrice(p, looseNum(r[pr]), 'Excel import', today()); p.opening = Math.floor(looseNum(r[oi])); }
-        else { p = { id: uid('P'), sku, category: normalize(r[ci]), name, price: looseNum(r[pr]), opening: Math.floor(looseNum(r[oi])) }; products.push(p); } // fresh ID: never collides with a removed product's tombstone
+        if (p) { p.category = normalize(r[ci]); p.name = name; setPrice(p, looseNum(r[pr]), 'Excel import', today()); p.opening = looseNum(r[oi]); }
+        else { p = { id: uid('P'), sku, category: normalize(r[ci]), name, price: looseNum(r[pr]), opening: looseNum(r[oi]) }; products.push(p); } // fresh ID: never collides with a removed product's tombstone
         if (barcode && !barcodeOwner(barcode, p.id)) p.barcode = barcode;
         count++;
       });
