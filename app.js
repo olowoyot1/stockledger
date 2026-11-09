@@ -637,15 +637,22 @@
       if (data.length < 2) throw new Error(t('imp.noRows'));
       if (data.length > MAX_IMPORT_ROWS + 1) throw new Error(t('imp.tooMany'));
       const h = data[0].map(x => String(x).trim().toLowerCase().replace(/[_-]+/g, ' ')), ix = (...ks) => { for (const k of ks) { const i = h.indexOf(k); if (i >= 0) return i; } return -1; };
-      const ci = ix('category'), pi = ix('product', 'product name', 'item'), si = ix('sku', 'code', 'product code'), bi = ix('barcode', 'bar code', 'ean', 'upc', 'gtin'), pr = ix('unit price', 'price', 'selling price'), oi = ix('opening stock', 'opening', 'stock');
+      const ci = ix('category'), pi = ix('product', 'product name', 'item'), si = ix('sku', 'code', 'product code'), bi = ix('barcode', 'bar code', 'ean', 'upc', 'gtin'), pr = ix('unit price', 'price', 'selling price'), oi = ix('opening stock', 'opening', 'stock'), bu = ix('base unit', 'stock unit'), us = ix('selling units', 'unit conversions', 'units'), cu = ix('currency', 'currency code');
       if ([ci, pi, pr, oi].some(x => x < 0)) throw new Error(t('imp.cols'));
       let count = 0;
       data.slice(1).forEach(r => {
         const name = String(r[pi] ?? '').trim().slice(0, 120); if (!name) return;
         const sku = String(si >= 0 ? r[si] : '').trim().slice(0, 32), barcode = bi >= 0 ? cleanCode(r[bi]) : '';
         let p = (barcode && products.find(x => x.barcode === barcode)) || (sku && products.find(x => x.sku === sku)) || products.find(x => x.name.toLowerCase() === name.toLowerCase());
+        const baseUnit = bu >= 0 && String(r[bu] || '').trim() ? String(r[bu]).trim().slice(0, 40) : (p?.baseUnit || 'Piece');
+        const importedUnits = us >= 0 ? String(r[us] || '').split(/[;\\n]/).map(line => { const at = line.lastIndexOf('='); const unit = at < 0 ? '' : line.slice(0, at).trim(); const factor = at < 0 ? NaN : Number(line.slice(at + 1).trim()); return unit && Number.isFinite(factor) && factor > 0 ? { name: unit.slice(0, 40), factor } : null; }).filter(Boolean) : [];
+        const currency = cu >= 0 && /^[A-Z]{3}$/i.test(String(r[cu] || '').trim()) ? String(r[cu]).trim().toUpperCase() : (p?.currency || 'NGN');
         if (p) { p.category = normalize(r[ci]); p.name = name; setPrice(p, looseNum(r[pr]), 'Excel import', today()); p.opening = looseNum(r[oi]); }
-        else { p = { id: uid('P'), sku, category: normalize(r[ci]), name, price: looseNum(r[pr]), opening: looseNum(r[oi]) }; products.push(p); } // fresh ID: never collides with a removed product's tombstone
+        else { p = { id: uid('P'), sku, category: normalize(r[ci]), name, price: looseNum(r[pr]), opening: looseNum(r[oi]), baseUnit, units: [{ name: baseUnit, factor: 1 }], currency }; products.push(p); } // fresh ID: never collides with a removed product's tombstone
+        if (bu >= 0 && String(r[bu] || '').trim()) p.baseUnit = baseUnit;
+        if (importedUnits.length) p.units = importedUnits;
+        if (!Array.isArray(p.units) || !p.units.some(u => u.name.toLowerCase() === p.baseUnit.toLowerCase() && u.factor === 1)) p.units = [{ name: p.baseUnit, factor: 1 }, ...(p.units || [])];
+        p.currency = currency;
         if (barcode && !barcodeOwner(barcode, p.id)) p.barcode = barcode;
         count++;
       });
