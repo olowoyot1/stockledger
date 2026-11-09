@@ -252,7 +252,7 @@
     const visible = rows.filter(r => (r.name + ' ' + r.category + ' ' + (skuOf.get(r.id) || '') + ' ' + (barcodeOf.get(r.id) || '')).toLowerCase().includes(q));
     $('salesBody').innerHTML = visible.map(r => {
       const z = calc(r), nm = esc(r.name);
-      const cell = (f, v, label, extra = '') => '<td><input data-f="' + f + '" type="number" min="0" inputmode="numeric" value="' + v + '" ' + extra + ' aria-label="' + th(label) + ': ' + nm + '"></td>';
+      const cell = (f, v, label, extra = '') => '<td><input data-f="' + f + '" type="number" min="0" step="any" inputmode="decimal" value="' + v + '" ' + extra + ' aria-label="' + th(label) + ': ' + nm + '"></td>';
       return '<tr data-id="' + esc(r.id) + '"><td>' + esc(r.category) + '</td><td><b>' + nm + '</b><small class="muted"> ' + esc(skuOf.get(r.id) || '') + '</small></td>'
         + cell('opening', r.opening, 'col.opening') + cell('added', r.added, 'col.additions') + '<td class="av">' + z.available + '</td>'
         + cell('closing', z.closing, 'col.closing', 'max="' + z.available + '"')
@@ -386,7 +386,7 @@
     $('pCategory').innerHTML = categoryOptionsHtml(allCategories(), CATS[0]);
     $('pNewCategory').value = ''; $('pNewCategoryRow').classList.add('hidden');
     if ($('pBaseUnit')) $('pBaseUnit').value = 'Piece';
-    if ($('pUnits')) $('pUnits').value = 'Piece=1';
+    if ($('pUnits')) $('pUnits').value = '';
     if ($('pCurrency')) $('pCurrency').value = 'NGN';
     $('pBarcode').value = cleanCode(barcode);
     $('productDialog').showModal(); $('pName').focus();
@@ -725,7 +725,7 @@
       if (locked()) return;
       const i = e.target.closest('input[data-f]'), tr = i?.closest('tr'); if (!i || !tr) return;
       const r = rows.find(x => x.id === tr.dataset.id); if (!r) return;
-      const f = i.dataset.f, v = (f === 'price' || f === 'sold') ? num(i.value) : Math.floor(num(i.value));
+      const f = i.dataset.f, v = num(i.value);
       if (f === 'sold') { const av = calc(r).available; r.closing = av - Math.min(v, av); } else r[f] = v;
       refreshRow(tr, r, i); summary(); persistDay();
     });
