@@ -69,7 +69,7 @@
   ensureSkus();
 
   /* ---------------- stock maths ---------------- */
-  const calc = r => { const available = num(r.opening) + num(r.added), closing = Math.min(num(r.closing), available), sold = available - closing; return { available, closing, sold, sales: Number.isFinite(Number(r.salesTotal)) ? num(r.salesTotal) : sold * num(r.price) }; };
+  const calc = r => { const available = num(r.opening) + num(r.added), closing = Math.min(num(r.closing), available), sold = available - closing; return { available, closing, sold, sales: Number.isFinite(Number(r.salesTotal)) ? num(r.salesTotal) + Math.max(0, sold - (r.transactions || []).reduce((n, tx) => n + num(tx.baseQty), 0)) * num(r.price) : sold * num(r.price) }; };
   const latestDay = () => Object.keys(days).filter(k => days[k]?.rows?.length).sort().pop() || '';
   const isCurrent = d => d >= today() || d >= latestDay();
   function openStock(p, d) {
@@ -274,11 +274,11 @@
   function summary() {
     const tt = totals(rows);
     $('mSales').textContent = salesMoney(rows); $('mUnits').textContent = tt.units; $('mAdded').textContent = tt.added; $('mClosing').textContent = tt.closing;
-    $('categorySummary').innerHTML = Object.entries(tt.c).map(([k, v]) => '<div class="category-card"><span class="muted">' + esc(k) + '</span><strong>' + money(v) + '</strong><small>' + th('sales.unitsSold', { n: rows.filter(r => r.category === k).reduce((n, r) => n + calc(r).sold, 0) }) + '</small></div>').join('');
+    $('categorySummary').innerHTML = Object.entries(tt.c).map(([k, v]) => '<div class="category-card"><span class="muted">' + esc(k) + '</span><strong>' + salesMoney(rows.filter(r => r.category === k)) + '</strong><small>' + th('sales.unitsSold', { n: rows.filter(r => r.category === k).reduce((n, r) => n + calc(r).sold, 0) }) + '</small></div>').join('');
   }
   function refreshRow(tr, r, active) {
     const z = calc(r); r.closing = z.closing;
-    tr.querySelector('.av').textContent = z.available; tr.querySelector('.rev b').textContent = money(z.sales);
+    tr.querySelector('.av').textContent = z.available; tr.querySelector('.rev b').textContent = money(z.sales, r.currency || 'NGN');
     const c = tr.querySelector('[data-f="closing"]'), s = tr.querySelector('[data-f="sold"]');
     c.max = z.available; s.max = z.available;
     if (c !== active || num(c.value) > z.available) c.value = z.closing;
@@ -485,7 +485,7 @@
     const ds = Object.values(days).filter(d => d && isYmd(d.date)).sort((a, b) => b.date.localeCompare(a.date));
     $('reportsBody').innerHTML = ds.map(d => {
       const tt = totals(d.rows || []), dt = esc(d.date);
-      return '<tr><td>' + fd(d.date) + (d.savedAt ? '' : ' <span class="badge">' + th('reports.draft') + '</span>') + '</td><td>' + money(tt.sales) + '</td><td>' + tt.units + '</td><td>' + tt.added + '</td><td>' + tt.closing + '</td>'
+      return '<tr><td>' + fd(d.date) + (d.savedAt ? '' : ' <span class="badge">' + th('reports.draft') + '</span>') + '</td><td>' + salesMoney(d.rows || []) + '</td><td>' + tt.units + '</td><td>' + tt.added + '</td><td>' + tt.closing + '</td>'
         + '<td><div class="reports-actions"><button class="btn open" data-date="' + dt + '" type="button">' + th('common.edit') + '</button><button class="btn move" data-date="' + dt + '" type="button">' + th('sales.changeDate') + '</button><button class="btn clone" data-date="' + dt + '" type="button">' + th('sales.clone') + '</button></div></td></tr>';
     }).join('') || '<tr><td colspan="6" class="muted">' + th('reports.none') + '</td></tr>';
     custom(); history();
@@ -535,9 +535,9 @@
     const n = Number($('analyticsRange').value || 7), ds = [];
     for (let i = n - 1; i >= 0; i--) { const d = new Date(); d.setDate(d.getDate() - i); ds.push(ymd(d)); }
     const v = ds.map(d => ({ d, t: totals(days[d]?.rows || []) })), total = v.reduce((s, x) => s + x.t.sales, 0), units = v.reduce((s, x) => s + x.t.units, 0);
-    const best = [...v].sort((a, b) => b.t.sales - a.t.sales)[0], max = Math.max(1, ...v.map(x => x.t.sales)), active = v.filter(x => x.t.sales || x.t.units || x.t.added || x.t.closing).length;
+    const active = v.filter(x => x.t.sales || x.t.units || x.t.added || x.t.closing).length;
     const periodRows = ds.flatMap(d => days[d]?.rows || []); $('aSales').textContent = salesMoney(periodRows); $('aAvg').textContent = salesMoney(periodRows.map(r => ({ ...r, salesTotal: calc(r).sales / Math.max(1, active) }))); $('aUnits').textContent = units;
-    $('aBest').textContent = best?.t.sales ? fd(best.d) + ' ' + money(best.t.sales) : '—';
+    const currencies = new Set(periodRows.map(r => r.currency || 'NGN')); $('aBest').textContent = currencies.size === 1 ? (v.filter(x => x.t.sales).sort((a, b) => b.t.sales - a.t.sales)[0]?.d || '—') : 'See currency totals';
     const currencyTotals = {}; periodRows.forEach(r => { const c = r.currency || 'NGN'; currencyTotals[c] = (currencyTotals[c] || 0) + calc(r).sales; }); $('chart').innerHTML = '<div class="list-row"><span>Sales by currency</span><b>' + Object.entries(currencyTotals).map(([c, n]) => money(n, c)).join(' · ') + '</b></div>';
     const p = {}, c = {};
     v.forEach(x => (days[x.d]?.rows || []).forEach(r => { const z = calc(r); (p[r.name] = p[r.name] || { sales: 0, units: 0 }); p[r.name].sales += z.sales; p[r.name].units += z.sold; c[r.category] = (c[r.category] || 0) + z.sales; }));
