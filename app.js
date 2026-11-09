@@ -300,7 +300,7 @@
     const q = tr.querySelector('.add-qty'), n = num(q.value), r = rows.find(x => x.id === tr.dataset.id), p = products.find(x => x.id === tr.dataset.id), unitName = tr.querySelector('.sale-unit')?.value || p?.baseUnit || 'Piece', factor = r ? Number(r.units?.find(u => u.name === unitName)?.factor || 0) : 0, unitPrice = num(tr.querySelector('.sale-price')?.value);
     if (!r || !p || !n || !factor) { q.focus(); return; }
     const consumed = n * factor, z = calc(r);
-    if (consumed > z.closing + 1e-9) { toast('Not enough stock. Available: ' + z.closing + ' ' + (p.baseUnit || 'base units')); return; }
+    if (consumed > z.closing + 1e-9) { toast(t('sales.onlyLeft', { n: z.closing, name: r.name })); return; }
     r.closing = Math.max(0, z.closing - consumed);
     r.transactions = [...(r.transactions || []), { id: uid('TX'), qty: n, unit: unitName, factor, baseQty: consumed, unitPrice, currency: r.currency || p.currency || 'NGN', total: n * unitPrice, at: new Date().toISOString() }];
     r.salesTotal = (Number(r.salesTotal) || 0) + n * unitPrice; q.value = '';
