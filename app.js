@@ -245,7 +245,7 @@
     const d = curDate(), saved = days[d]?.rows || [];
     rows = products.map(p => {
       const o = saved.find(x => x.id === p.id), opening = o ? num(o.opening) : openStock(p, d);
-      return { id: p.id, category: p.category, name: p.name, price: num(o?.price ?? p.price), opening, added: num(o?.added), closing: o ? num(o.closing) : opening, baseUnit: p.baseUnit || 'Piece', units: productUnits(p), currency: p.currency || 'NGN', salesTotal: o?.salesTotal, transactions: Array.isArray(o?.transactions) ? o.transactions : [] };
+      return { id: p.id, category: p.category, name: p.name, price: num(o?.price ?? p.price), opening, added: num(o?.added), closing: o ? num(o.closing) : opening, baseUnit: o?.baseUnit || p.baseUnit || 'Piece', units: Array.isArray(o?.units) && o.units.length ? o.units : productUnits(p), currency: o?.currency || p.currency || 'NGN', salesTotal: o?.salesTotal, transactions: Array.isArray(o?.transactions) ? o.transactions : [] };
     });
     const skuOf = new Map(products.map(p => [p.id, p.sku])), barcodeOf = new Map(products.map(p => [p.id, p.barcode]));
     const q = ($('salesSearch').value || '').toLowerCase();
@@ -297,12 +297,12 @@
   }
   function addSale(tr) {
     if (locked()) { toast(t(canEdit() ? 'sales.clickEdit' : 'acct.readOnlyToast')); return; }
-    const q = tr.querySelector('.add-qty'), n = num(q.value), r = rows.find(x => x.id === tr.dataset.id), p = products.find(x => x.id === tr.dataset.id), unitName = tr.querySelector('.sale-unit')?.value || p?.baseUnit || 'Piece', factor = p ? unitFactor(p, unitName) : 1, unitPrice = num(tr.querySelector('.sale-price')?.value);
+    const q = tr.querySelector('.add-qty'), n = num(q.value), r = rows.find(x => x.id === tr.dataset.id), p = products.find(x => x.id === tr.dataset.id), unitName = tr.querySelector('.sale-unit')?.value || p?.baseUnit || 'Piece', factor = r ? Number(r.units?.find(u => u.name === unitName)?.factor || 0) : 0, unitPrice = num(tr.querySelector('.sale-price')?.value);
     if (!r || !p || !n || !factor) { q.focus(); return; }
     const consumed = n * factor, z = calc(r);
     if (consumed > z.closing + 1e-9) { toast('Not enough stock. Available: ' + z.closing + ' ' + (p.baseUnit || 'base units')); return; }
     r.closing = Math.max(0, z.closing - consumed);
-    r.transactions = [...(r.transactions || []), { id: uid('TX'), qty: n, unit: unitName, factor, baseQty: consumed, unitPrice, currency: p.currency || 'NGN', total: n * unitPrice, at: new Date().toISOString() }];
+    r.transactions = [...(r.transactions || []), { id: uid('TX'), qty: n, unit: unitName, factor, baseQty: consumed, unitPrice, currency: r.currency || p.currency || 'NGN', total: n * unitPrice, at: new Date().toISOString() }];
     r.salesTotal = (Number(r.salesTotal) || 0) + n * unitPrice; q.value = '';
     refreshRow(tr, r); summary(); persistDay(); toast(t('sales.addedSold', { n, name: r.name }));
   }
@@ -424,6 +424,8 @@
     if (!guard() || !p) return;
     const base = prompt('Base stock unit for ' + p.name + ' (e.g. kg, litre, bag):', p.baseUnit || 'Piece');
     if (base === null || !base.trim()) return;
+    const hasHistory = Object.values(days).some(d => (d?.rows || []).some(r => r.id === p.id));
+    if (hasHistory && base.trim().toLowerCase() !== String(p.baseUnit || 'Piece').toLowerCase()) { toast('Base stock unit cannot be changed after sales history exists. Add a new product if you need a different base unit.'); return; }
     const current = productUnits(p).map(u => u.name + '=' + u.factor).join('\n');
     const raw = prompt('Enter each selling unit on a new line as Unit=quantity in ' + base + '. Blank lines are ignored. Example: Half bag=0.5', current);
     if (raw === null) return;
@@ -746,7 +748,7 @@
       const sel = e.target.closest('.sale-unit'), tr = sel?.closest('tr');
       if (!sel || !tr) return;
       const r = rows.find(x => x.id === tr.dataset.id), p = products.find(x => x.id === tr.dataset.id);
-      if (r && p) tr.querySelector('.sale-price').value = (num(r.price) * unitFactor(p, sel.value)).toFixed(2);
+      if (r && p) tr.querySelector('.sale-price').value = (num(r.price) * Number(r.units?.find(u => u.name === sel.value)?.factor || 0)).toFixed(2);
     });
     $('salesBody').addEventListener('click', e => { const b = e.target.closest('.add-sale-btn'); if (b) addSale(b.closest('tr')); });
     $('salesBody').addEventListener('keydown', e => { if (e.key !== 'Enter' || e.isComposing || e.keyCode === 229 || !e.target.classList.contains('add-qty')) return; e.preventDefault(); addSale(e.target.closest('tr')); });
