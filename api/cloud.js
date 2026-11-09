@@ -128,16 +128,33 @@ const stamp = v => { const t = typeof v === 'string' ? Date.parse(v) : NaN; retu
 const list = (v, fn, max) => (Array.isArray(v) ? v : []).slice(0, max).map(fn).filter(Boolean);
 const isObj = v => !!v && typeof v === 'object' && !Array.isArray(v);
 
+const cleanUnits = units => list(units, u => isObj(u) && text(u.name, 40) && Number.isFinite(Number(u.factor)) && Number(u.factor) > 0 && Number(u.factor) <= 1e9
+  ? { name: text(u.name, 40), factor: Number(u.factor) } : null, 40);
 const cleanProduct = p => {
   if (!isObj(p) || !text(p.id, 64)) return null;
   const out = { id: text(p.id, 64), category: text(p.category, 40) || 'Other', name: text(p.name, 120), price: amount(p.price), opening: amount(p.opening) };
   if (p.sku) out.sku = text(p.sku, 32);
+  if (p.baseUnit) out.baseUnit = text(p.baseUnit, 40);
+  if (p.units) out.units = cleanUnits(p.units);
+  if (/^[A-Z]{3}$/.test(String(p.currency || ''))) out.currency = String(p.currency);
   if (Array.isArray(p.priceLog)) out.priceLog = list(p.priceLog, l => isObj(l) ? { at: stamp(l.at), date: text(l.date, 10), from: amount(l.from), to: amount(l.to), src: text(l.src, 40) } : null, 200);
   return out;
 };
-const cleanRow = r => isObj(r) && text(r.id, 64)
-  ? { id: text(r.id, 64), category: text(r.category, 40) || 'Other', name: text(r.name, 120), price: amount(r.price), opening: amount(r.opening), added: amount(r.added), closing: amount(r.closing) }
-  : null;
+const cleanTransaction = tx => isObj(tx) && text(tx.id, 80) && text(tx.unit, 40)
+  ? { id: text(tx.id, 80), qty: amount(tx.qty), unit: text(tx.unit, 40), factor: amount(tx.factor), baseQty: amount(tx.baseQty),
+      unitPrice: amount(tx.unitPrice), currency: /^[A-Z]{3}$/.test(String(tx.currency || '')) ? String(tx.currency) : 'NGN',
+      total: amount(tx.total), at: stamp(tx.at) } : null;
+const cleanRow = r => {
+  if (!isObj(r) || !text(r.id, 64)) return null;
+  const out = { id: text(r.id, 64), category: text(r.category, 40) || 'Other', name: text(r.name, 120),
+    price: amount(r.price), opening: amount(r.opening), added: amount(r.added), closing: amount(r.closing) };
+  if (r.baseUnit) out.baseUnit = text(r.baseUnit, 40);
+  if (r.units) out.units = cleanUnits(r.units);
+  if (/^[A-Z]{3}$/.test(String(r.currency || ''))) out.currency = String(r.currency);
+  if (r.salesTotal !== undefined) out.salesTotal = amount(r.salesTotal);
+  if (Array.isArray(r.transactions)) out.transactions = list(r.transactions, cleanTransaction, 2000);
+  return out;
+};
 const cleanDay = (date, d) => {
   if (!isObj(d)) return null;
   const out = { date, savedAt: stamp(d.savedAt), updatedAt: stamp(d.updatedAt), rows: list(d.rows, cleanRow, 5000) };
