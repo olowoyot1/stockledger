@@ -21,7 +21,9 @@
   const today = () => ymd(new Date());
   const isYmd = d => /^\d{4}-\d{2}-\d{2}$/.test(d || '');
   const fd = d => isYmd(d) ? d.slice(8, 10) + '/' + d.slice(5, 7) + '/' + d.slice(0, 4) : String(d || '');
-  const money = x => '₦' + Number(x || 0).toLocaleString('en-NG', { maximumFractionDigits: 2 });
+  const money = (x, currency = 'NGN') => { try { return new Intl.NumberFormat('en-NG', { style: 'currency', currency, maximumFractionDigits: 2 }).format(Number(x || 0)); } catch { return currency + ' ' + Number(x || 0).toLocaleString('en-NG', { maximumFractionDigits: 2 }); } };
+  const productUnits = p => Array.isArray(p?.units) && p.units.length ? p.units : [{ name: p?.baseUnit || 'Piece', factor: 1 }];
+  const unitFactor = (p, name) => Number(productUnits(p).find(u => u.name === name)?.factor || 0);
   const uid = p => p + '-' + (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2, 10));
   const dayTime = d => Date.parse(d?.updatedAt || d?.savedAt || '') || 0;
   const normalize = x => {
@@ -66,7 +68,7 @@
   ensureSkus();
 
   /* ---------------- stock maths ---------------- */
-  const calc = r => { const available = num(r.opening) + num(r.added), closing = Math.min(num(r.closing), available), sold = available - closing; return { available, closing, sold, sales: sold * num(r.price) }; };
+  const calc = r => { const available = num(r.opening) + num(r.added), closing = Math.min(num(r.closing), available), sold = available - closing; return { available, closing, sold, sales: Number.isFinite(Number(r.salesTotal)) ? num(r.salesTotal) : sold * num(r.price) }; };
   const latestDay = () => Object.keys(days).filter(k => days[k]?.rows?.length).sort().pop() || '';
   const isCurrent = d => d >= today() || d >= latestDay();
   function openStock(p, d) {
@@ -242,7 +244,7 @@
     const d = curDate(), saved = days[d]?.rows || [];
     rows = products.map(p => {
       const o = saved.find(x => x.id === p.id), opening = o ? num(o.opening) : openStock(p, d);
-      return { id: p.id, category: p.category, name: p.name, price: num(o?.price ?? p.price), opening, added: num(o?.added), closing: o ? num(o.closing) : opening };
+      return { id: p.id, category: p.category, name: p.name, price: num(o?.price ?? p.price), opening, added: num(o?.added), closing: o ? num(o.closing) : opening, baseUnit: p.baseUnit || 'Piece', units: productUnits(p), currency: p.currency || 'NGN', salesTotal: o?.salesTotal, transactions: Array.isArray(o?.transactions) ? o.transactions : [] };
     });
     const skuOf = new Map(products.map(p => [p.id, p.sku])), barcodeOf = new Map(products.map(p => [p.id, p.barcode]));
     const q = ($('salesSearch').value || '').toLowerCase();
@@ -254,7 +256,7 @@
         + cell('opening', r.opening, 'col.opening') + cell('added', r.added, 'col.additions') + '<td class="av">' + z.available + '</td>'
         + cell('closing', z.closing, 'col.closing', 'max="' + z.available + '"')
         + '<td class="sold"><input data-f="sold" type="number" min="0" step="any" inputmode="decimal" max="' + z.available + '" value="' + z.sold + '" aria-label="' + th('sales.ariaSold', { name: r.name }) + '"></td>'
-        + '<td><div class="add-sale"><input class="add-qty" type="number" min="0.01" step="any" inputmode="decimal" placeholder="' + th('sales.qty') + '" aria-label="' + th('sales.ariaAdd', { name: r.name }) + '"><button class="btn add-sale-btn" type="button">' + th('sales.add') + '</button></div></td>'
+        + '<td><div class="add-sale market-sale"><input class="add-qty" type="number" min="0.001" step="any" inputmode="decimal" placeholder="' + th('sales.qty') + '" aria-label="' + th('sales.ariaAdd', { name: r.name }) + '"><select class="sale-unit" aria-label="Selling unit">' + r.units.map(u => '<option value="' + esc(u.name) + '">' + esc(u.name) + '</option>').join('') + '</select><input class="sale-price" type="number" min="0" step="any" inputmode="decimal" value="' + (r.price * (r.units[0]?.factor || 1)) + '" aria-label="Price per selling unit"><button class="btn add-sale-btn" type="button">' + th('sales.add') + '</button></div></td>'
         + '<td><input data-f="price" type="number" min="0" step="any" inputmode="decimal" value="' + r.price + '" aria-label="' + th('col.unitPrice') + ': ' + nm + '"></td><td class="rev"><b>' + money(z.sales) + '</b></td></tr>';
     }).join('') || '<tr><td colspan="10" class="muted">' + th(products.length ? 'sales.empty' : 'products.empty') + '</td></tr>';
     summary(); saveLabel();
@@ -293,11 +295,13 @@
   }
   function addSale(tr) {
     if (locked()) { toast(t(canEdit() ? 'sales.clickEdit' : 'acct.readOnlyToast')); return; }
-    const q = tr.querySelector('.add-qty'), n = num(q.value), r = rows.find(x => x.id === tr.dataset.id);
-    if (!r || !n) { q.focus(); return; }
-    const z = calc(r);
-    if (n > z.closing) { toast(t('sales.onlyLeft', { n: z.closing, name: r.name })); return; }
-    r.closing = z.closing - n; q.value = '';
+    const q = tr.querySelector('.add-qty'), n = num(q.value), r = rows.find(x => x.id === tr.dataset.id), p = products.find(x => x.id === tr.dataset.id), unitName = tr.querySelector('.sale-unit')?.value || p?.baseUnit || 'Piece', factor = p ? unitFactor(p, unitName) : 1, unitPrice = num(tr.querySelector('.sale-price')?.value);
+    if (!r || !p || !n || !factor) { q.focus(); return; }
+    const consumed = n * factor, z = calc(r);
+    if (consumed > z.closing + 1e-9) { toast('Not enough stock. Available: ' + z.closing + ' ' + (p.baseUnit || 'base units')); return; }
+    r.closing = Math.max(0, z.closing - consumed);
+    r.transactions = [...(r.transactions || []), { id: uid('TX'), qty: n, unit: unitName, factor, baseQty: consumed, unitPrice, currency: p.currency || 'NGN', total: n * unitPrice, at: new Date().toISOString() }];
+    r.salesTotal = (Number(r.salesTotal) || 0) + n * unitPrice; q.value = '';
     refreshRow(tr, r); summary(); persistDay(); toast(t('sales.addedSold', { n, name: r.name }));
   }
   function cloneDay(from, to) {
@@ -379,6 +383,9 @@
     $('productForm').reset();
     $('pCategory').innerHTML = categoryOptionsHtml(allCategories(), CATS[0]);
     $('pNewCategory').value = ''; $('pNewCategoryRow').classList.add('hidden');
+    if ($('pBaseUnit')) $('pBaseUnit').value = 'Piece';
+    if ($('pUnits')) $('pUnits').value = 'Piece=1';
+    if ($('pCurrency')) $('pCurrency').value = 'NGN';
     $('pBarcode').value = cleanCode(barcode);
     $('productDialog').showModal(); $('pName').focus();
   }
@@ -394,7 +401,11 @@
     }
     const barcode = cleanCode($('pBarcode').value), owner = barcodeOwner(barcode);
     if (owner) { toast(t('products.barcodeTaken', { code: barcode, name: owner.name })); $('pBarcode').focus(); return; }
-    const p = { id: uid('P'), sku: '', category: normalize(category), name, price: num($('pPrice').value), opening: Math.floor(num($('pOpening').value)) };
+    const baseUnit = ($('pBaseUnit')?.value || 'Piece').trim() || 'Piece';
+    const units = String($('pUnits')?.value || baseUnit + '=1').split(/\r?\n/).map(line => { const at = line.lastIndexOf('='); return at < 0 ? null : { name: line.slice(0, at).trim().slice(0, 40), factor: Number(line.slice(at + 1).trim()) }; }).filter(u => u && u.name && Number.isFinite(u.factor) && u.factor > 0 && u.factor <= 1e9);
+    if (!units.some(u => u.name === baseUnit && u.factor === 1)) units.unshift({ name: baseUnit, factor: 1 });
+    if (!units.length) { toast('Add at least one valid selling unit as Unit=quantity.'); return; }
+    const p = { id: uid('P'), sku: '', category: normalize(category), name, price: num($('pPrice').value), opening: num($('pOpening').value), baseUnit, units, currency: $('pCurrency')?.value || 'NGN' };
     if (barcode) p.barcode = barcode;
     products.push(p);
     ensureSkus(); if (!write(KEYS.products, products)) { toast(t('toast.storageFull')); return; }
