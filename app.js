@@ -23,6 +23,7 @@
   const fd = d => isYmd(d) ? d.slice(8, 10) + '/' + d.slice(5, 7) + '/' + d.slice(0, 4) : String(d || '');
   const money = (x, currency = 'NGN') => { try { return new Intl.NumberFormat('en-NG', { style: 'currency', currency, maximumFractionDigits: 2 }).format(Number(x || 0)); } catch { return currency + ' ' + Number(x || 0).toLocaleString('en-NG', { maximumFractionDigits: 2 }); } };
   const productUnits = p => Array.isArray(p?.units) && p.units.length ? p.units : [{ name: p?.baseUnit || 'Piece', factor: 1 }];
+  const NIGERIAN_UNIT_NAMES = ['Paint bucket', 'Derica', 'Half derica', 'Full bottle', 'Half bottle', 'Bag', 'Half bag', 'Quarter bag', 'Half ike', 'Ike', 'Drum', 'Congo'];
   const unitFactor = (p, name) => Number(productUnits(p).find(u => u.name === name)?.factor || 0);
   const uid = p => p + '-' + (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2, 10));
   const dayTime = d => Date.parse(d?.updatedAt || d?.savedAt || '') || 0;
@@ -85,8 +86,8 @@
     p.price = price; dirty.p = true; return true;
   }
   function totals(rs) {
-    const out = { sales: 0, units: 0, added: 0, closing: 0, p: {}, c: {} };
-    rs.forEach(r => { const z = calc(r); out.sales += z.sales; out.units += z.sold; out.added += num(r.added); out.closing += z.closing; out.p[r.name] = (out.p[r.name] || 0) + z.sales; out.c[r.category] = (out.c[r.category] || 0) + z.sales; });
+    const out = { sales: 0, salesByCurrency: {}, units: 0, added: 0, closing: 0, p: {}, c: {} };
+    rs.forEach(r => { const z = calc(r); out.sales += z.sales; const cur = r.currency || 'NGN'; out.salesByCurrency[cur] = (out.salesByCurrency[cur] || 0) + z.sales; out.units += z.sold; out.added += num(r.added); out.closing += z.closing; out.p[r.name] = (out.p[r.name] || 0) + z.sales; out.c[r.category] = (out.c[r.category] || 0) + z.sales; });
     return out;
   }
   function dateList(a, b) {
@@ -257,7 +258,7 @@
         + cell('closing', z.closing, 'col.closing', 'max="' + z.available + '"')
         + '<td class="sold"><input data-f="sold" type="number" min="0" step="any" inputmode="decimal" max="' + z.available + '" value="' + z.sold + '" aria-label="' + th('sales.ariaSold', { name: r.name }) + '"></td>'
         + '<td><div class="add-sale market-sale"><input class="add-qty" type="number" min="0.001" step="any" inputmode="decimal" placeholder="' + th('sales.qty') + '" aria-label="' + th('sales.ariaAdd', { name: r.name }) + '"><select class="sale-unit" aria-label="Selling unit">' + r.units.map(u => '<option value="' + esc(u.name) + '">' + esc(u.name) + '</option>').join('') + '</select><input class="sale-price" type="number" min="0" step="any" inputmode="decimal" value="' + (r.price * (r.units[0]?.factor || 1)) + '" aria-label="Price per selling unit"><button class="btn add-sale-btn" type="button">' + th('sales.add') + '</button></div></td>'
-        + '<td><input data-f="price" type="number" min="0" step="any" inputmode="decimal" value="' + r.price + '" aria-label="' + th('col.unitPrice') + ': ' + nm + '"></td><td class="rev"><b>' + money(z.sales) + '</b></td></tr>';
+        + '<td><input data-f="price" type="number" min="0" step="any" inputmode="decimal" value="' + r.price + '" aria-label="' + th('col.unitPrice') + ': ' + nm + '"></td><td class="rev"><b>' + money(z.sales, r.currency || 'NGN') + '</b></td></tr>';
     }).join('') || '<tr><td colspan="10" class="muted">' + th(products.length ? 'sales.empty' : 'products.empty') + '</td></tr>';
     summary(); saveLabel();
   }
@@ -269,9 +270,10 @@
     $('cloneDayBtn').disabled = !has || ro; $('changeDateBtn').disabled = !has || ro; $('clearDayBtn').disabled = !has || ro;
     $('salesBody').querySelectorAll('input,button').forEach(x => { x.disabled = lk; });
   }
+  function salesMoney(rs) { const tt = totals(rs); return Object.entries(tt.salesByCurrency).map(([c, v]) => money(v, c)).join(' · ') || money(0, 'NGN'); }
   function summary() {
     const tt = totals(rows);
-    $('mSales').textContent = money(tt.sales); $('mUnits').textContent = tt.units; $('mAdded').textContent = tt.added; $('mClosing').textContent = tt.closing;
+    $('mSales').textContent = salesMoney(rows); $('mUnits').textContent = tt.units; $('mAdded').textContent = tt.added; $('mClosing').textContent = tt.closing;
     $('categorySummary').innerHTML = Object.entries(tt.c).map(([k, v]) => '<div class="category-card"><span class="muted">' + esc(k) + '</span><strong>' + money(v) + '</strong><small>' + th('sales.unitsSold', { n: rows.filter(r => r.category === k).reduce((n, r) => n + calc(r).sold, 0) }) + '</small></div>').join('');
   }
   function refreshRow(tr, r, active) {
@@ -388,6 +390,12 @@
     if ($('pCurrency')) $('pCurrency').value = 'NGN';
     $('pBarcode').value = cleanCode(barcode);
     $('productDialog').showModal(); $('pName').focus();
+  }
+  function insertLocalUnitNames() {
+    const base = ($('pBaseUnit').value || '').trim() || 'kg';
+    $('pUnits').value = [base + '=1', ...NIGERIAN_UNIT_NAMES.filter(n => n.toLowerCase() !== base.toLowerCase()).map(n => n + '=')].join('\n');
+    $('pUnits').focus();
+    toast('Enter how many ' + base + ' each local measure contains. Leave unused measures blank.');
   }
   function submitProduct(e) {
     e.preventDefault();
@@ -707,6 +715,12 @@
       const r = rows.find(x => x.id === tr.dataset.id);
       if (setPrice(products.find(p => p.id === tr.dataset.id), r?.price, 'Daily Sales', d)) { flush(); prod(); toast(t('products.priceSynced')); }
     });
+    $('salesBody').addEventListener('change', e => {
+      const sel = e.target.closest('.sale-unit'), tr = sel?.closest('tr');
+      if (!sel || !tr) return;
+      const r = rows.find(x => x.id === tr.dataset.id), p = products.find(x => x.id === tr.dataset.id);
+      if (r && p) tr.querySelector('.sale-price').value = (num(r.price) * unitFactor(p, sel.value)).toFixed(2);
+    });
     $('salesBody').addEventListener('click', e => { const b = e.target.closest('.add-sale-btn'); if (b) addSale(b.closest('tr')); });
     $('salesBody').addEventListener('keydown', e => { if (e.key !== 'Enter' || e.isComposing || e.keyCode === 229 || !e.target.classList.contains('add-qty')) return; e.preventDefault(); addSale(e.target.closest('tr')); });
     $('changeDateBtn').addEventListener('click', () => openMove(curDate()));
@@ -774,6 +788,7 @@
     $('addProductBtn').addEventListener('click', () => openProductDialog());
     $('productsScanBtn').addEventListener('click', scanForProducts);
     $('pCategory').addEventListener('change', toggleNewCategory);
+    $('presetUnitsBtn')?.addEventListener('click', insertLocalUnitNames);
     $('pScanBtn').addEventListener('click', async () => { const code = await scanCode(); if (code) $('pBarcode').value = code; });
     $('pBarcode').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing && e.keyCode !== 229) e.preventDefault(); }); // a handheld scanner's Enter must not submit the form early
     $('productForm').addEventListener('submit', submitProduct);
