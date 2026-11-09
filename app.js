@@ -511,10 +511,10 @@
     if (!p) { $('productHistory').innerHTML = '<p class="muted pad">' + th('reports.noProducts') + '</p>'; return; }
     const h = historyRows(p.id), units = h.reduce((s, x) => s + x.z.sold, 0), sl = h.reduce((s, x) => s + x.z.sales, 0), added = h.reduce((s, x) => s + num(x.r.added), 0), log = (p.priceLog || []).slice().reverse();
     const box = (k, v) => '<div class="summary-box"><span>' + th(k) + '</span><strong>' + v + '</strong></div>';
-    $('productHistory').innerHTML = '<div class="report-summary pad">' + box('reports.currentPrice', money(p.price)) + box('reports.totalUnits', units) + box('reports.totalSales', money(sl)) + box('m.added', added) + '</div>'
+    $('productHistory').innerHTML = '<div class="report-summary pad">' + box('reports.currentPrice', money(p.price, p.currency || 'NGN')) + box('reports.totalUnits', units) + box('reports.totalSales', money(sl, p.currency || 'NGN')) + box('m.added', added) + '</div>'
       + '<div class="table-wrap"><table><thead><tr>' + ['col.date', 'col.opening', 'col.additions', 'col.available', 'col.closing', 'col.sold', 'col.unitPrice', 'col.sales'].map(k => '<th scope="col">' + th(k) + '</th>').join('') + '</tr></thead><tbody>'
       + (h.slice().reverse().map(x => rowCells(fd(x.d), num(x.r.opening), num(x.r.added), x.z.available, x.z.closing, '<b>' + x.z.sold + '</b>',
-        money(x.r.price) + (x.was !== null ? '<small class="price-change">' + th('reports.was', { price: money(x.was) }) + '</small>' : ''), '<b>' + money(x.z.sales) + '</b>')).join('')
+        money(x.r.price, p.currency || 'NGN') + (x.was !== null ? '<small class="price-change">' + th('reports.was', { price: money(x.was, p.currency || 'NGN') }) + '</small>' : ''), '<b>' + money(x.z.sales) + '</b>')).join('')
         || '<tr><td colspan="8" class="muted">' + th('reports.noActivity') + '</td></tr>') + '</tbody></table></div>'
       + '<div class="pad"><h3>' + th('reports.priceChanges') + '</h3>' + (log.map(l => '<div class="list-row"><span>' + fd(ymd(new Date(l.at))) + ' ' + pad(new Date(l.at).getHours()) + ':' + pad(new Date(l.at).getMinutes())
         + ' <small class="muted">' + th('reports.via', { src: t(SRC[l.src] || '') === (SRC[l.src] || '') ? l.src : t(SRC[l.src]) }) + '</small></span><b>' + money(l.from) + ' → ' + money(l.to) + '</b></div>').join('') || '<p class="muted">' + th('reports.noPriceChanges') + '</p>') + '</div>';
@@ -527,7 +527,7 @@
     const rs = []; list.forEach(d => (days[d]?.rows || []).forEach(r => rs.push(r)));
     const tt = totals(rs), saved = list.filter(d => days[d]).length, top = Object.entries(tt.p).sort((x, y) => y[1] - x[1]).slice(0, 8);
     const box = (k, v) => '<div class="summary-box"><span>' + th(k) + '</span><strong>' + v + '</strong></div>';
-    $('customReport').innerHTML = '<div class="report-summary">' + box('reports.totalSales', money(tt.sales)) + box('m.units', tt.units) + box('m.added', tt.added) + box('reports.savedDays', saved + '/' + list.length) + '</div>'
+    $('customReport').innerHTML = '<div class="report-summary">' + box('reports.totalSales', salesMoney(rs)) + box('m.units', tt.units) + box('m.added', tt.added) + box('reports.savedDays', saved + '/' + list.length) + '</div>'
       + '<div class="two-col"><div class="panel"><h3>' + th('reports.topProducts') + '</h3>' + (top.map(x => '<div class="list-row"><span>' + esc(x[0]) + '</span><b>' + money(x[1]) + '</b></div>').join('') || '<p class="muted">' + th('reports.noData') + '</p>')
       + '</div><div class="panel"><h3>' + th('reports.categorySales') + '</h3>' + Object.entries(tt.c).sort((x, y) => y[1] - x[1]).map(x => '<div class="list-row"><span>' + esc(x[0]) + '</span><b>' + money(x[1]) + '</b></div>').join('') + '</div></div>';
   }
@@ -536,13 +536,12 @@
     for (let i = n - 1; i >= 0; i--) { const d = new Date(); d.setDate(d.getDate() - i); ds.push(ymd(d)); }
     const v = ds.map(d => ({ d, t: totals(days[d]?.rows || []) })), total = v.reduce((s, x) => s + x.t.sales, 0), units = v.reduce((s, x) => s + x.t.units, 0);
     const best = [...v].sort((a, b) => b.t.sales - a.t.sales)[0], max = Math.max(1, ...v.map(x => x.t.sales)), active = v.filter(x => x.t.sales || x.t.units || x.t.added || x.t.closing).length;
-    $('aSales').textContent = money(total); $('aAvg').textContent = money(active ? total / active : 0); $('aUnits').textContent = units;
+    const periodRows = ds.flatMap(d => days[d]?.rows || []); $('aSales').textContent = salesMoney(periodRows); $('aAvg').textContent = salesMoney(periodRows.map(r => ({ ...r, salesTotal: calc(r).sales / Math.max(1, active) }))); $('aUnits').textContent = units;
     $('aBest').textContent = best?.t.sales ? fd(best.d) + ' ' + money(best.t.sales) : '—';
-    $('chart').innerHTML = v.map(x => '<div class="bar-wrap" title="' + fd(x.d) + ' — ' + money(x.t.sales) + '"><div class="bar" data-h="' + Math.max(2, x.t.sales / max * 210) + '"></div><div class="bar-label">' + fd(x.d).slice(0, 5) + '</div></div>').join('');
-    $('chart').querySelectorAll('.bar').forEach(b => { b.style.height = b.dataset.h + 'px'; }); // CSSOM, so no inline-style CSP exception is needed
+    const currencyTotals = {}; periodRows.forEach(r => { const c = r.currency || 'NGN'; currencyTotals[c] = (currencyTotals[c] || 0) + calc(r).sales; }); $('chart').innerHTML = '<div class="list-row"><span>Sales by currency</span><b>' + Object.entries(currencyTotals).map(([c, n]) => money(n, c)).join(' · ') + '</b></div>';
     const p = {}, c = {};
     v.forEach(x => (days[x.d]?.rows || []).forEach(r => { const z = calc(r); (p[r.name] = p[r.name] || { sales: 0, units: 0 }); p[r.name].sales += z.sales; p[r.name].units += z.sold; c[r.category] = (c[r.category] || 0) + z.sales; }));
-    $('topProducts').innerHTML = Object.entries(p).sort((a, b) => b[1].sales - a[1].sales).slice(0, 10).map(x => '<div class="list-row"><span>' + esc(x[0]) + '<small class="muted"> ' + th('an.qty', { n: x[1].units }) + '</small></span><b>' + money(x[1].sales) + '</b></div>').join('') || '<p class="muted">' + th('an.none') + '</p>';
+    $('topProducts').innerHTML = Object.entries(p).sort((a, b) => b[1].sales - a[1].sales).slice(0, 10).map(x => '<div class="list-row"><span>' + esc(x[0]) + '<small class="muted"> ' + th('an.qty', { n: x[1].units }) + '</small></span><b>' + money(x[1].sales, products.find(p => p.name === x[0])?.currency || 'NGN') + '</b></div>').join('') || '<p class="muted">' + th('an.none') + '</p>';
     $('catAnalytics').innerHTML = Object.entries(c).sort((a, b) => b[1] - a[1]).map(x => '<div class="list-row"><span>' + esc(x[0]) + '</span><b>' + money(x[1]) + '</b></div>').join('') || '<p class="muted">' + th('an.none') + '</p>';
   }
   function rangeLabels() { [...$('analyticsRange').options].forEach(o => { o.textContent = t('an.lastN', { n: o.value }); }); }
