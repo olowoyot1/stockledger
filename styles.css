@@ -315,3 +315,13 @@ tbody tr:hover td{background:#f6fbf8}
 
 .search-tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .search-tools .search{flex:1 1 180px}
+
+
+/* Nigerian market sales controls */
+.market-sale{display:flex;flex-wrap:wrap;gap:5px;min-width:220px}
+.market-sale .add-qty{width:64px;min-width:54px;flex:1 1 54px}
+.market-sale .sale-unit{width:112px;min-width:100px;flex:1 1 100px}
+.market-sale .sale-price{width:86px;min-width:76px;flex:1 1 76px}
+.market-sale .add-sale-btn{flex:0 0 auto;padding-inline:12px}
+.units-btn{margin:4px 4px 4px 0;padding:5px 9px;font-size:12px;min-height:32px}
+@media(max-width:760px){.market-sale{min-width:240px}.market-sale input,.market-sale select{min-height:40px}}
