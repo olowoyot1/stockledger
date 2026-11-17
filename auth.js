@@ -7,7 +7,8 @@
   const $ = id => document.getElementById(id);
   const t = (k, v) => window.I18N.t(k, v);
 
-  const readSession = () => { try { const s = JSON.parse(localStorage.getItem(SESSION_KEY)); return s && s.token ? s : null; } catch { return null; } };
+  const SHORT_SESSION_MS = 12 * 60 * 60 * 1000; // sessions without "Remember me" lapse after 12 hours (shared phones and counters)
+  const readSession = () => { try { const s = JSON.parse(localStorage.getItem(SESSION_KEY)); return s && s.token && !(s.until && s.until < Date.now()) ? s : null; } catch { return null; } };
   const tokenExpired = token => { // payload is the middle segment; the server is the real authority, this just avoids pointless calls
     try { const p = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))); return !(p.e > Date.now()); } catch { return true; }
   };
@@ -37,12 +38,12 @@
     return out;
   }
 
-  function adopt(out, username) {
+  function adopt(out, username, remember) {
     const prev = localStorage.getItem('dc_ws');
     if (prev && prev !== out.workspaceId) SLAuth.purgeLocal(); // shared device: never mix two businesses' data
     localStorage.setItem('dc_ws', out.workspaceId);
     localStorage.setItem('dc_account', JSON.stringify(out.account));
-    SLAuth.save({ token: out.token, username });
+    SLAuth.save({ token: out.token, username, until: remember ? 0 : Date.now() + SHORT_SESSION_MS });
   }
 
   // One-time upgrade: exchange a stored legacy password for a token, then delete the password.
@@ -62,18 +63,30 @@
   let signUp = false;
   function setMode(up) {
     signUp = up;
+    const set = (id, key) => { const el = $(id); el.dataset.i18n = key; el.textContent = t(key); };
     $('bizRow').classList.toggle('hidden', !up);
-    $('tabIn').classList.toggle('active', !up); $('tabUp').classList.toggle('active', up);
-    $('tabIn').setAttribute('aria-selected', String(!up)); $('tabUp').setAttribute('aria-selected', String(up));
-    $('loginBtn').dataset.i18n = up ? 'login.submitUp' : 'login.submitIn';
-    $('loginBtn').textContent = t(up ? 'login.submitUp' : 'login.submitIn');
+    set('loginTitle', up ? 'login.createTitle' : 'login.welcome');
+    set('loginBtn', up ? 'login.submitUp' : 'login.submitIn');
+    set('modeBtn', up ? 'login.haveAccount' : 'login.create');
+    $('loginSub').dataset.i18n = up ? 'login.createSub' : 'login.welcomeSub'; $('loginSub').dataset.i18nVars = up ? 'login.createSub|price=1,500' : '';
+    $('loginSub').textContent = t(up ? 'login.createSub' : 'login.welcomeSub', { price: '1,500' });
+    if (!up) $('loginSub').removeAttribute('data-i18n-vars');
+    $('loginPin').dataset.i18nPlaceholder = up ? 'login.newPassword' : 'login.password';
+    $('loginPin').placeholder = t(up ? 'login.newPassword' : 'login.password');
     $('loginPin').autocomplete = up ? 'new-password' : 'current-password';
+    document.querySelector('.login-meta').classList.toggle('hidden', up);
     $('loginError').textContent = '';
   }
 
   function wire() {
-    $('tabIn').onclick = () => setMode(false);
-    $('tabUp').onclick = () => setMode(true);
+    $('modeBtn').onclick = () => setMode(!signUp);
+    $('togglePw').onclick = () => {
+      const show = $('loginPin').type === 'password';
+      $('loginPin').type = show ? 'text' : 'password';
+      $('togglePw').setAttribute('aria-pressed', String(show));
+      $('togglePw').setAttribute('aria-label', t(show ? 'login.hide' : 'login.show')); $('togglePw').dataset.i18nAria = show ? 'login.hide' : 'login.show';
+    };
+    $('forgotBtn').onclick = () => { $('loginError').textContent = t('login.forgotHelp'); };
     try { const n = sessionStorage.getItem('sl_notice'); if (n) { $('loginError').textContent = t('err.' + n); sessionStorage.removeItem('sl_notice'); } } catch { /* ignore */ }
     $('loginForm').addEventListener('submit', async e => {
       e.preventDefault();
@@ -86,7 +99,7 @@
       btn.disabled = true; btn.textContent = t('common.wait');
       try {
         const out = await post({ action: signUp ? 'signup' : 'login', username, password, businessName });
-        adopt(out, username);
+        adopt(out, username, signUp || $('rememberMe').checked);
         location.reload();
       } catch (ex) {
         err.textContent = SLAuth.errorText(ex);
