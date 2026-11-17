@@ -10,11 +10,26 @@
   const FRAME_MS = 140, MAX_CODE = 64;
 
   let zxingPromise = null;
-  const loadZxing = () => window.ZXing ? Promise.resolve(window.ZXing) : (zxingPromise = zxingPromise || new Promise((res, rej) => {
-    const s = document.createElement('script'); s.src = '/vendor/zxing.min.js';
-    s.onload = () => res(window.ZXing); s.onerror = () => { zxingPromise = null; rej(new Error('Barcode reader failed to load')); };
-    document.head.appendChild(s);
-  }));
+  const loadZxing = () => {
+    if (window.ZXing) return Promise.resolve(window.ZXing);
+    if (zxingPromise) return zxingPromise;
+    zxingPromise = new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      const fail = () => {
+        clearTimeout(timeout); script.remove(); zxingPromise = null;
+        reject(new Error('Barcode reader failed to load'));
+      };
+      const timeout = setTimeout(fail, 12000);
+      script.src = '/vendor/zxing.min.js';
+      script.onload = () => {
+        if (!window.ZXing?.MultiFormatReader) { fail(); return; }
+        clearTimeout(timeout); resolve(window.ZXing);
+      };
+      script.onerror = fail;
+      document.head.appendChild(script);
+    });
+    return zxingPromise;
+  };
 
   async function createDecoder() {
     if ('BarcodeDetector' in window) {
@@ -23,10 +38,22 @@
         const formats = NATIVE_FORMATS.filter(f => supported.includes(f));
         if (formats.length) {
           const detector = new window.BarcodeDetector({ formats });
-          return async video => (await detector.detect(video))[0]?.rawValue || '';
+          let fallback = null;
+          return async video => {
+            if (fallback) return fallback(video);
+            try { return (await detector.detect(video))[0]?.rawValue || ''; }
+            catch {
+              fallback = await createZxingDecoder();
+              return fallback(video);
+            }
+          };
         }
       } catch { /* fall through to ZXing */ }
     }
+    return createZxingDecoder();
+  }
+
+  async function createZxingDecoder() {
     const Z = await loadZxing();
     const reader = new Z.MultiFormatReader(), hints = new Map();
     hints.set(Z.DecodeHintType.POSSIBLE_FORMATS, ZXING_FORMATS.map(f => Z.BarcodeFormat[f]));
@@ -77,18 +104,28 @@
       stream?.getTracks().forEach(tr => tr.stop()); stream = null; video.srcObject = null;
     };
     const finish = code => {
-      if (!active) return;
+      if (active?.promise !== promise) return;
       stop(); active = null;
-      d.removeEventListener('close', onClose); form.removeEventListener('submit', onSubmit); $('scanCancel').removeEventListener('click', onCancel);
+      d.removeEventListener('close', onClose); d.removeEventListener('cancel', onCancel);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('pagehide', onCancel);
+      form.removeEventListener('submit', onSubmit); manual.removeEventListener('keydown', onKeyDown);
+      $('scanCancel').removeEventListener('click', onCancel);
       if (d.open) d.close();
       const clean = String(code || '').replace(/[\u0000-\u001F\u007F]/g, '').trim().slice(0, MAX_CODE);
       resolve(clean || null);
     };
     const form = $('scanForm');
     const onSubmit = e => { e.preventDefault(); if (manual.value.trim()) finish(manual.value); else manual.focus(); };
-    const onCancel = () => finish(null);
-    const onClose = () => finish(null); // Escape key
-    form.addEventListener('submit', onSubmit); $('scanCancel').addEventListener('click', onCancel); d.addEventListener('close', onClose);
+    const onCancel = e => { e?.preventDefault(); finish(null); };
+    const onClose = () => { if (!d.open) finish(null); };
+    const onVisibilityChange = () => { if (document.hidden) finish(null); };
+    const onKeyDown = e => { if (e.key === 'Enter' && (e.isComposing || e.keyCode === 229)) e.preventDefault(); };
+    form.addEventListener('submit', onSubmit); manual.addEventListener('keydown', onKeyDown);
+    $('scanCancel').addEventListener('click', onCancel);
+    d.addEventListener('close', onClose); d.addEventListener('cancel', onCancel);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('pagehide', onCancel);
 
     d.showModal(); $('scanCancel').focus(); // keep the on-screen keyboard closed so the camera view stays visible
 
@@ -96,17 +133,20 @@
     (async () => {
       if (!navigator.mediaDevices?.getUserMedia) { noCamera('scan.noCamera'); return; }
       try {
-        const [s, decode] = await Promise.all([
-          navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } } }),
-          createDecoder()
-        ]);
+        const decode = await createDecoder();
+        if (stopped) return;
+        const s = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } } });
         if (stopped) { s.getTracks().forEach(tr => tr.stop()); return; }
-        stream = s; video.srcObject = s; await video.play().catch(() => {});
+        stream = s; video.srcObject = s;
+        s.getVideoTracks().forEach(track => track.addEventListener('ended', () => { if (!stopped) noCamera('scan.noCamera'); }, { once: true }));
+        await video.play();
+        if (stopped) return;
         statusEl.textContent = t('scan.help');
         const tick = async () => {
           if (stopped) return;
           let code = '';
-          try { code = video.readyState >= 2 ? await decode(video) : ''; } catch { code = ''; }
+          try { code = video.readyState >= 2 ? await decode(video) : ''; }
+          catch { if (!stopped) noCamera('scan.noCamera'); return; }
           if (stopped) return;
           if (code) { navigator.vibrate?.(60); finish(code); return; }
           timer = setTimeout(tick, FRAME_MS);
